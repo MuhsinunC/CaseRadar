@@ -563,5 +563,5 @@ If blocked on >3 phases:
 
 ## RALPH LOOP COMMAND:
 ```bash
-/ralph-loop "$(cat prompts/class-action-saas-build.md)" --completion-promise "SAAS_COMPLETE" --max-iterations 500
+/ralph-loop:ralph-loop "$(cat prompts/class-action-saas-build.md)" --completion-promise "SAAS_COMPLETE" --max-iterations 500
 ```
