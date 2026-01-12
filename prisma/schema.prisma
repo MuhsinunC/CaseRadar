@@ -1,0 +1,245 @@
+// CaseRadar Prisma Schema
+// Documentation: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+// ============================================
+// Multi-tenancy
+// ============================================
+
+model Organization {
+  id         String   @id @default(cuid())
+  name       String
+  clerkOrgId String   @unique
+  plan       Plan     @default(FREE)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users               User[]
+  patterns            Pattern[]
+  generatedComplaints GeneratedComplaint[]
+  subscription        Subscription?
+  auditLogs           AuditLog[]
+
+  @@index([clerkOrgId])
+}
+
+model User {
+  id             String       @id @default(cuid())
+  clerkUserId    String       @unique
+  email          String
+  role           Role         @default(VIEWER)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([clerkUserId])
+}
+
+// ============================================
+// NHTSA Complaint Data
+// ============================================
+
+model Complaint {
+  id           String    @id @default(cuid())
+  nhtsaId      String    @unique // CMPLID from NHTSA
+  odiNumber    String // ODINO from NHTSA
+  manufacturer String
+  make         String
+  model        String
+  year         Int
+  component    String
+  description  String    @db.Text
+  crash        Boolean   @default(false)
+  fire         Boolean   @default(false)
+  injuries     Int       @default(0)
+  deaths       Int       @default(0)
+  failDate     DateTime?
+  dateAdded    DateTime
+
+  // Vector embedding for semantic search (1536 dimensions for text-embedding-3-small)
+  embedding Unsupported("vector(1536)")?
+
+  // Cluster/Pattern assignment
+  clusterId String?
+  cluster   Pattern? @relation(fields: [clusterId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([make, model, year])
+  @@index([component])
+  @@index([dateAdded])
+  @@index([clusterId])
+}
+
+// ============================================
+// Pattern/Cluster Analysis
+// ============================================
+
+model Pattern {
+  id          String  @id @default(cuid())
+  name        String // Auto-generated from top terms
+  description String?
+  make        String
+  model       String?
+  yearStart   Int?
+  yearEnd     Int?
+  component   String
+
+  // Aggregate statistics
+  complaintCount Int @default(0)
+  crashCount     Int @default(0)
+  fireCount      Int @default(0)
+  injuryCount    Int @default(0)
+  deathCount     Int @default(0)
+
+  // Scoring for prioritization
+  severityScore  Float        @default(0)
+  trendScore     Float        @default(0) // Rate of increase over time
+  trendDirection TrendDirection @default(STABLE)
+
+  // Tracking
+  firstSeen   DateTime
+  lastUpdated DateTime
+  isActive    Boolean  @default(true)
+
+  // Relations
+  complaints          Complaint[]
+  generatedComplaints GeneratedComplaint[]
+
+  // Tenant visibility (null = global, otherwise org-specific)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([severityScore])
+  @@index([trendScore])
+  @@index([make, model])
+  @@index([component])
+  @@index([organizationId])
+}
+
+// ============================================
+// Generated Legal Complaints
+// ============================================
+
+model GeneratedComplaint {
+  id             String       @id @default(cuid())
+  patternId      String
+  pattern        Pattern      @relation(fields: [patternId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Content
+  title   String
+  content Json   // Structured complaint data (sections, plaintiff info, etc.)
+  pdfUrl  String? // Supabase Storage URL for generated PDF
+
+  // Metadata
+  status  ComplaintStatus @default(DRAFT)
+  version Int             @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String // Clerk user ID
+
+  @@index([organizationId])
+  @@index([patternId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================
+// Billing (Stripe Integration)
+// ============================================
+
+model Subscription {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  stripeCustomerId     String  @unique
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+
+  status             SubscriptionStatus @default(INACTIVE)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// Audit Logging
+// ============================================
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  action         String // CREATE, UPDATE, DELETE, VIEW, EXPORT, LOGIN, LOGOUT, LOGIN_FAILED, etc.
+  resource       String // USER, ORGANIZATION, COMPLAINT, PATTERN, AUTH, BILLING, etc.
+  resourceId     String?
+  metadata       Json? // Additional context (sensitive data is filtered)
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+}
+
+// ============================================
+// Enums
+// ============================================
+
+enum Plan {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum ComplaintStatus {
+  DRAFT
+  FINALIZED
+  FILED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum TrendDirection {
+  INCREASING
+  DECREASING
+  STABLE
+}
