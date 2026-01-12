@@ -1,9 +1,11 @@
 ultrathink:
-# Class Action Case Tool - Full SaaS Build
+# CaseRadar - Full SaaS Build
 
-You are building a comprehensive, enterprise-grade SaaS platform for law firms specializing in class action lawsuits. This platform monitors NHTSA vehicle complaint data, identifies patterns using semantic analysis, and auto-generates formal legal complaints.
+You are building **CaseRadar**, a comprehensive, enterprise-grade SaaS platform for law firms specializing in class action lawsuits. This platform monitors NHTSA vehicle complaint data, identifies patterns using semantic analysis, and auto-generates formal legal complaints.
 
 ## Project Overview
+
+**Product Name**: CaseRadar
 
 **Business Purpose**: Law firms pay subscription access to:
 1. Monitor NHTSA vehicle complaint data in real-time
@@ -560,4 +562,6 @@ If blocked on >3 phases:
 
 
 ## RALPH LOOP COMMAND:
+```bash
 /ralph-loop "$(cat prompts/class-action-saas-build.md)" --completion-promise "SAAS_COMPLETE" --max-iterations 500
+```
