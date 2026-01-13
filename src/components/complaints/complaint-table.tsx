@@ -228,15 +228,23 @@ export function ComplaintTable({
                 <TableCell
                   data-testid={`description-${complaint.id}`}
                   className="max-w-xs text-sm text-muted-foreground"
-                  title={complaint.description}
+                  title={complaint.description ?? ''}
                 >
                   <span className="block truncate max-w-xs">
-                    {complaint.description.slice(0, 100)}
-                    {complaint.description.length > 100 && '...'}
+                    {(complaint.description ?? '').slice(0, 100)}
+                    {(complaint.description ?? '').length > 100 && '...'}
                   </span>
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
-                  {format(complaint.dateAdded, 'MMM d, yyyy')}
+                  {(() => {
+                    try {
+                      if (!complaint.dateAdded) return 'N/A';
+                      const date = new Date(complaint.dateAdded);
+                      return isNaN(date.getTime()) ? 'N/A' : format(date, 'MMM d, yyyy');
+                    } catch {
+                      return 'N/A';
+                    }
+                  })()}
                 </TableCell>
               </TableRow>
             ))

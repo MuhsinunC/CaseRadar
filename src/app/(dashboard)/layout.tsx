@@ -19,6 +19,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
+import { UserButton } from '@clerk/nextjs';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -105,7 +106,7 @@ export default function DashboardLayout({
             </Button>
             <div className="flex-1" />
             <div className="flex items-center gap-2">
-              {/* User menu would go here */}
+              <UserButton afterSignOutUrl="/" />
             </div>
           </div>
         </header>

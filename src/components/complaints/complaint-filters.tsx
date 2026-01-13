@@ -136,9 +136,9 @@ export function ComplaintFilters({
         </div>
 
         {/* Filter fields */}
-        <div className={cn('space-y-4', !isExpanded && 'hidden md:block')}>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
+        <div className={cn('space-y-6', !isExpanded && 'hidden md:block')}>
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="space-y-2">
               <Label htmlFor="make-filter">Make</Label>
               <Input
                 id="make-filter"
@@ -146,7 +146,7 @@ export function ComplaintFilters({
                 onChange={(e) => handleFilterChange('make', e.target.value)}
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="model-filter">Model</Label>
               <Input
                 id="model-filter"
@@ -154,7 +154,7 @@ export function ComplaintFilters({
                 onChange={(e) => handleFilterChange('model', e.target.value)}
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="component-filter">Component</Label>
               <Input
                 id="component-filter"
@@ -164,8 +164,8 @@ export function ComplaintFilters({
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
               <Label htmlFor="year-from-filter">Year From</Label>
               <Input
                 id="year-from-filter"
@@ -179,7 +179,7 @@ export function ComplaintFilters({
                 }
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="year-to-filter">Year To</Label>
               <Input
                 id="year-to-filter"
