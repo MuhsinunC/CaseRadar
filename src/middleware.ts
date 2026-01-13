@@ -4,6 +4,7 @@
  */
 
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
 // Define public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
@@ -34,20 +35,21 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // Protect all other routes
-  const { userId, orgId } = await auth();
+  const { userId } = await auth();
 
   // Require authentication
   if (!userId) {
     const signInUrl = new URL('/sign-in', req.url);
     signInUrl.searchParams.set('redirect_url', req.url);
-    return Response.redirect(signInUrl);
+    return NextResponse.redirect(signInUrl);
   }
 
+  // TODO: Re-enable organization requirement once org-select page is created
   // Require organization for org routes
-  if (isOrgRoute(req) && !orgId) {
-    const orgSelectUrl = new URL('/org-select', req.url);
-    return Response.redirect(orgSelectUrl);
-  }
+  // if (isOrgRoute(req) && !orgId) {
+  //   const orgSelectUrl = new URL('/org-select', req.url);
+  //   return Response.redirect(orgSelectUrl);
+  // }
 });
 
 export const config = {
