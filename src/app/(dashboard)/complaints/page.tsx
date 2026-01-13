@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ComplaintTable } from '@/components/complaints/complaint-table';
 import { ComplaintFilters } from '@/components/complaints/complaint-filters';
+import { ComplaintDetailDialog } from '@/components/complaints/complaint-detail-dialog';
 
 interface Complaint {
   id: string;
@@ -63,6 +64,8 @@ export default function ComplaintsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
 
   const fetchComplaints = useCallback(async () => {
     setIsLoading(true);
@@ -119,8 +122,8 @@ export default function ComplaintsPage() {
   };
 
   const handleRowClick = (complaint: Complaint) => {
-    console.log('Complaint clicked:', complaint);
-    // Could open a modal or navigate to detail page
+    setSelectedComplaint(complaint);
+    setDetailDialogOpen(true);
   };
 
   return (
@@ -171,6 +174,13 @@ export default function ComplaintsPage() {
           </button>
         </div>
       )}
+
+      {/* Complaint Detail Dialog */}
+      <ComplaintDetailDialog
+        complaint={selectedComplaint}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+      />
     </div>
   );
 }

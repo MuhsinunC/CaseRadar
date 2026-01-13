@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PatternCard } from '@/components/patterns/pattern-card';
+import { PatternDetailDialog } from '@/components/patterns/pattern-detail-dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +42,7 @@ export default function PatternsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [minSeverity, setMinSeverity] = useState<number | undefined>();
   const [selectedPattern, setSelectedPattern] = useState<Pattern | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
 
   useEffect(() => {
     async function fetchPatterns() {
@@ -74,6 +76,7 @@ export default function PatternsPage() {
 
   const handlePatternClick = (pattern: Pattern) => {
     setSelectedPattern(pattern);
+    setDetailDialogOpen(true);
   };
 
   const handleGenerateComplaint = (patternId: string) => {
@@ -167,6 +170,14 @@ export default function PatternsPage() {
           ))}
         </div>
       )}
+
+      {/* Pattern Detail Dialog */}
+      <PatternDetailDialog
+        pattern={selectedPattern}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        onGenerateComplaint={handleGenerateComplaint}
+      />
     </div>
   );
 }
