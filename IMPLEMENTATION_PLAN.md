@@ -5362,7 +5362,7 @@ describe('Data Residency', () => {
 
 ---
 
-## P3-4: Per-Plan Entitlements
+## P3-4: Per-Plan Entitlements - IMPLEMENTED
 
 **Document Reference:** 13-testing-development.md
 **Why Low:** Plan differentiation for billing
@@ -5462,11 +5462,11 @@ describe('Per-Plan Entitlements', () => {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] Plan entitlements defined
-- [ ] Entitlement checking function
-- [ ] Usage limit checking
-- [ ] All tests pass
+- [x] Test file created
+- [x] Plan entitlements defined
+- [x] Entitlement checking function
+- [x] Usage limit checking
+- [x] All tests pass (23 tests)
 
 ---
 
