@@ -45,8 +45,13 @@ model User {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  // GDPR soft-delete support
+  deletedAt      DateTime?
+  isDeleted      Boolean      @default(false)
+
   @@index([organizationId])
   @@index([clerkUserId])
+  @@index([isDeleted])
 }
 
 // ============================================
@@ -157,6 +162,9 @@ model GeneratedComplaint {
   contentHash String?         // SHA-256 hash for integrity verification
   legalHold   Boolean         @default(false) // If true, cannot be deleted
 
+  // GDPR soft-delete support
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   createdBy String // Clerk user ID
@@ -166,6 +174,7 @@ model GeneratedComplaint {
   @@index([status])
   @@index([createdAt])
   @@index([legalHold])
+  @@index([deletedAt])
 }
 
 // ============================================
@@ -305,4 +314,20 @@ enum TrendDirection {
 enum LegalHoldStatus {
   ACTIVE
   RELEASED
+}
+
+// ============================================
+// GDPR Data Export Log
+// ============================================
+
+model DataExportLog {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  format         String       // 'json' or 'csv'
+  status         String       @default("COMPLETED")
+  createdAt      DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@index([organizationId])
 }

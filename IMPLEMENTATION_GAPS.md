@@ -1,278 +1,663 @@
 # CaseRadar Implementation Gaps Analysis
 
 **Last Updated:** 2026-01-14
-**Ralph Loop Iteration:** 4
+**Status:** Comprehensive gap analysis across all architecture documents (00-17)
+**Verification:** Ralph Loop iteration - ALL gaps documented
+
+---
 
 ## Summary
 
-This document tracks implementation gaps between the architecture documentation and actual codebase.
+This document tracks ALL implementation gaps between the architecture documentation (`docs/architecture/*.md`) and the actual codebase. Each section corresponds to an architecture document.
+
+**Legend:**
+- ✅ IMPLEMENTED - Feature exists and works
+- ⚠️ PARTIAL - Feature partially implemented
+- ❌ NOT IMPLEMENTED - Feature documented but not built
+- 📋 DOCUMENTED ONLY - Documentation/process, no code needed
 
 ---
 
-## Phase 1: Database Schema (01-database-schema.md)
+## 00-overview.md - System Overview
 
-### Implemented ✅
-- [x] Organization model with plan, clerkOrgId
-- [x] User model with clerkUserId, role, organizationId
-- [x] Complaint model with vector embedding support
-- [x] Pattern model with severity/trend scoring
-- [x] GeneratedComplaint model with status, version, contentHash, legalHold
-- [x] Subscription model for Stripe integration
-- [x] AuditLog model for compliance
-- [x] ProcessedWebhook model for idempotency
-- [x] LegalHold and LegalHoldScope models for e-Discovery
-- [x] All enums: Plan, Role, ComplaintStatus, SubscriptionStatus, TrendDirection, LegalHoldStatus
-- [x] All indexes defined
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Multi-tenant SaaS architecture | ✅ | Organization-based isolation |
+| NHTSA complaint analysis | ✅ | Sync and pattern detection |
+| AI-powered complaint generation | ✅ | Claude integration |
+| Role-based access control | ✅ | ADMIN, ANALYST, VIEWER |
 
-### Gaps ❌
-- [ ] None - schema is complete
+**Gaps:** None
 
 ---
 
-## Phase 2: API Routes (02-api-routes.md)
+## 01-database-schema.md - Database Schema
 
-### Implemented ✅
-- [x] GET /api/complaints - Search/list complaints
-- [x] GET /api/complaints/[id] - Get single complaint
-- [x] GET /api/patterns - List patterns with filtering
-- [x] POST /api/patterns - Create pattern (with plan limit check)
-- [x] GET /api/patterns/[id] - Get pattern details (with demo fallback)
-- [x] PATCH /api/patterns/[id] - Update pattern (ANALYST/ADMIN)
-- [x] DELETE /api/patterns/[id] - Delete pattern (ADMIN only)
-- [x] POST /api/generator - Generate complaint (with feature/limit check)
-- [x] GET /api/generator - List generated complaints
-- [x] GET /api/generator/[id] - Get generated complaint
-- [x] DELETE /api/generator/[id] - Delete generated complaint (not FINALIZED)
-- [x] GET /api/generator/[id]/pdf - Download PDF
-- [x] GET /api/dashboard/stats - Dashboard statistics
-- [x] GET /api/dashboard/activity - Activity feed
-- [x] GET /api/dashboard/alerts - System alerts
-- [x] GET /api/health - Basic health check
-- [x] GET /api/health/db - Database connectivity
-- [x] GET /api/health/services - External services health
-- [x] GET /api/cron/sync-nhtsa - NHTSA data sync
-- [x] GET /api/cron/analyze-patterns - Pattern analysis
-- [x] POST /api/webhooks/clerk - Clerk webhook (with signature verification)
-- [x] POST /api/webhooks/stripe - Stripe webhook (with signature verification)
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Organization model | ✅ | With plan, clerkOrgId |
+| User model | ✅ | With clerkUserId, role |
+| Complaint model | ✅ | With vector embeddings |
+| Pattern model | ✅ | With severity/trend |
+| GeneratedComplaint model | ✅ | With status, contentHash, legalHold |
+| Subscription model | ✅ | Stripe integration |
+| AuditLog model | ✅ | Compliance logging |
+| ProcessedWebhook model | ✅ | Webhook idempotency |
+| LegalHold model | ✅ | e-Discovery support |
+| LegalHoldScope model | ✅ | Resource targeting |
+| All required indexes | ✅ | Defined in schema |
+| pgvector extension | ⚠️ | Extension enabled, HNSW index not verified |
+| ClusteringRun table | ❌ | For clustering audit trail (ref: 10-ai-governance.md) |
+| AIVersion table | ❌ | For model/prompt versioning (ref: 10-ai-governance.md) |
 
-### Gaps ❌
-- [x] ~~**CRITICAL:** Rate limiting NOT integrated into API routes~~ ✅ DONE (Iteration 2)
-- [x] ~~**CRITICAL:** RFC 7807 error format NOT used~~ ✅ DONE (Iteration 4)
-- [x] ~~Rate limit headers (X-RateLimit-*) not returned in responses~~ ✅ DONE
-- [x] ~~Idempotency-Key header support for POST endpoints not implemented~~ ✅ DONE (Iteration 4 - src/lib/api/idempotency.ts)
-- [x] ~~Cursor-based pagination not implemented~~ ✅ DONE (Iteration 4 - hybrid pagination in src/lib/api/cursor-pagination.ts)
-
-**All API Routes gaps resolved ✅**
+**Gaps:**
+- ❌ **ClusteringRun table** - Needed for clustering reproducibility audit
+- ❌ **AIVersion table** - Needed for model/prompt version tracking
+- ⚠️ **pgvector HNSW index** - Verify index exists for efficient similarity search
 
 ---
 
-## Phase 3: Security & Compliance (09-security-compliance.md)
+## 02-api-routes.md - API Routes
 
-### Implemented ✅
-- [x] Clerk authentication with JWT verification
-- [x] Role-based access control (ADMIN, ANALYST, VIEWER)
-- [x] Tenant isolation in all protected routes
-- [x] Security headers in next.config.ts (HSTS, CSP, X-Frame-Options, etc.)
-- [x] Webhook signature verification (Svix for Clerk, Stripe native)
-- [x] Webhook timestamp validation (5-minute window for Clerk)
-- [x] Webhook idempotency tracking (ProcessedWebhook table)
-- [x] Input validation with Prisma (SQL injection prevention)
-- [x] AuditLog model exists
-- [x] Content hash utility exists (src/lib/security/content-hash.ts)
-- [x] LegalHold model exists for e-Discovery
+### Endpoints
 
-### Gaps ❌
-- [x] ~~**CRITICAL:** Content hashing NOT integrated into generator~~ ✅ DONE (Iteration 2)
-- [x] ~~**CRITICAL:** Legal hold check NOT enforced in DELETE endpoints~~ ✅ DONE (Iteration 2)
-- [x] ~~Audit logging NOT consistently applied in API routes~~ ✅ DONE (Iteration 3)
-- [x] ~~Rate limiting NOT enforced~~ ✅ DONE (Iteration 2)
-- [ ] Data masking - OUT OF SCOPE for MVP (documented in security compliance doc)
-- [ ] Secret rotation automation - OPERATIONAL (Vercel/Clerk/Stripe manage secrets)
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| GET /api/complaints | ✅ | Search/list with filters |
+| GET /api/complaints/[id] | ✅ | Single complaint |
+| GET /api/patterns | ✅ | List with filtering |
+| POST /api/patterns | ✅ | Create with plan limits |
+| GET /api/patterns/[id] | ✅ | Pattern details |
+| PATCH /api/patterns/[id] | ✅ | Update (ANALYST/ADMIN) |
+| DELETE /api/patterns/[id] | ✅ | Delete (ADMIN) |
+| POST /api/generator | ✅ | Generate complaint |
+| GET /api/generator | ✅ | List generated |
+| GET /api/generator/[id] | ✅ | Get generated |
+| DELETE /api/generator/[id] | ✅ | Delete (not FINALIZED) |
+| GET /api/generator/[id]/pdf | ✅ | PDF download |
+| GET /api/dashboard/stats | ✅ | Statistics |
+| GET /api/dashboard/activity | ✅ | Activity feed |
+| GET /api/dashboard/alerts | ✅ | System alerts |
+| GET /api/health | ✅ | Basic health |
+| GET /api/health/db | ✅ | Database check |
+| GET /api/health/services | ⚠️ | Missing OpenAI/Anthropic/Sentry |
+| GET /api/health/deep | ✅ | Comprehensive check |
+| GET /api/cron/sync-nhtsa | ✅ | NHTSA sync |
+| GET /api/cron/analyze-patterns | ✅ | Pattern analysis |
+| POST /api/webhooks/clerk | ✅ | With signature verification |
+| POST /api/webhooks/stripe | ✅ | With signature verification |
 
-**All critical security gaps resolved ✅**
+### API Standards
 
----
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| RFC 7807 error format | ✅ | All routes use Problems.* |
+| Rate limiting (global) | ✅ | In-memory (needs Redis for prod) |
+| Per-endpoint rate limits | ❌ | Specific limits per endpoint not configured |
+| Cursor-based pagination | ✅ | Hybrid pagination |
+| Idempotency keys (POST) | ✅ | POST /api/generator |
+| X-RateLimit-* headers | ✅ | Returned in responses |
 
-## Phase 4: AI Governance (10-ai-governance.md)
-
-### Implemented ✅
-- [x] Human-in-the-loop workflow (DRAFT → FINALIZED status)
-- [x] Version tracking on GeneratedComplaint
-- [x] Content hash field exists
-- [x] Cannot delete FINALIZED complaints
-- [x] Content hash computed on document creation (Iteration 2)
-
-### Gaps ❌
-- [x] ~~**CRITICAL:** Content hash NOT computed on document creation~~ ✅ DONE (Iteration 2)
-- [ ] Content hash verification on retrieval - ENHANCEMENT (hash stored, verification optional)
-- [ ] AI model version tracking - ENHANCEMENT (can add modelVersion field later)
-- [ ] Hallucination detection logging - ENHANCEMENT (grounded in NHTSA data, no AI hallucination possible)
-
-**Critical AI governance implemented ✅** (human-in-loop, content integrity, immutable finalized docs)
-
----
-
-## Phase 5: Reliability & Scalability (12-reliability-scalability.md)
-
-### Implemented ✅
-- [x] Health check endpoints (basic, db, services, deep)
-- [x] Timeout configuration in external API calls
-- [x] Circuit breaker pattern (src/lib/resilience/circuit-breaker.ts)
-- [x] Retry logic with exponential backoff (src/lib/resilience/retry.ts)
-- [x] Deep health check endpoint (/api/health/deep)
-- [x] Rate limiting with proper response format
-
-### Gaps ❌
-- [x] ~~**CRITICAL:** Circuit breaker pattern NOT implemented~~ ✅ DONE (Iteration 3)
-- [x] ~~**CRITICAL:** Retry logic with exponential backoff NOT implemented~~ ✅ DONE (Iteration 3)
-- [ ] Graceful degradation - PARTIAL (keyword search exists, semantic search optional)
-- [x] ~~Rate limit response format doesn't match spec~~ ✅ DONE (RFC 7807 format)
-- [x] ~~No deep health check endpoint~~ ✅ DONE (Iteration 4)
-
-**All critical reliability gaps resolved ✅**
+**Gaps:**
+- ❌ **Per-endpoint rate limiting** - Doc specifies: `/api/complaints/search` 60/min, `/api/generator/generate` 10/min, `/api/auth/*` 10/min/IP
+- ⚠️ **Health check missing AI services** - OpenAI/Anthropic/Sentry health verification
 
 ---
 
-## Phase 6: Monitoring & Observability (14-monitoring-observability.md)
+## 03-frontend-components.md - Frontend Components
 
-### Implemented ✅
-- [x] Console logging exists (console.error in all API routes)
-- [x] AuditLog model and logging utility (src/lib/security/audit-logging.ts)
-- [x] Health check endpoints for monitoring
-- [x] Error responses with RFC 7807 format (machine-readable)
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Dashboard page | ✅ | Stats, activity, alerts |
+| Complaints page | ✅ | Search, filters, table |
+| Patterns page | ✅ | List, severity indicators |
+| Generator page | ✅ | Form, history, PDF |
+| Settings page | ✅ | Profile, notifications, API, appearance |
+| Component library | ✅ | shadcn/ui components |
+| Theme support | ✅ | Light/dark mode |
 
-### Gaps ❌
-- [ ] Structured logging - ENHANCEMENT (Vercel provides built-in logging)
-- [ ] Request tracing (correlation IDs) - ENHANCEMENT (can add via middleware)
-- [ ] Performance metrics - ENHANCEMENT (Vercel Analytics available)
-
-**Core observability implemented ✅** (audit logs, health checks, error tracking)
+**Gaps:** None for MVP frontend
 
 ---
 
-## Priority Implementation Tasks
+## 04-authentication.md - Authentication
 
-### P0 - Critical (Must Fix)
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Clerk integration | ✅ | JWT verification |
+| Sign-in/sign-up flows | ✅ | Clerk components |
+| Organization management | ✅ | Clerk organizations |
+| Role-based permissions | ✅ | ADMIN, ANALYST, VIEWER |
+| Protected routes | ✅ | Middleware enforcement |
+| Session management | ✅ | Clerk handles |
+| MFA enforcement for admins | ❌ | Not configured |
+| Sign-in rate limiting | ❌ | 10/min/IP for brute force prevention |
 
-1. ~~**Integrate rate limiting into API routes**~~ ✅ DONE
-   - File: All API routes under src/app/api/
-   - Use existing utility: src/lib/api/rate-limit.ts
-   - Add X-RateLimit-* headers to responses
+**Gaps:**
+- ❌ **MFA enforcement** - Doc shows "Step-up Auth Required" for suspicious sessions
+- ❌ **Sign-in rate limiting** - `/api/auth/*` should be 10/min/IP per brute force prevention
 
-2. ~~**Integrate content hashing into generator**~~ ✅ DONE
-   - File: src/app/api/generator/route.ts
-   - Use existing utility: src/lib/security/content-hash.ts
-   - Compute and store hash on creation
+---
 
-3. ~~**Add legal hold checks to DELETE endpoints**~~ ✅ DONE
-   - Files: src/app/api/generator/[id]/route.ts, src/app/api/patterns/[id]/route.ts
-   - Check legalHold flag before deletion
-   - Query LegalHoldScope for pattern resources
+## 05-data-flow.md - Data Flow
 
-4. ~~**Use RFC 7807 error responses**~~ ✅ DONE (Iteration 4)
-   - All API routes now use Problems.* utility
-   - Integrated in: patterns, complaints, generator, dashboard routes
-   - Tests updated to expect RFC 7807 format (data.detail, data.errors)
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| NHTSA data ingestion | ✅ | Cron job sync |
+| Vector embeddings | ✅ | OpenAI embeddings |
+| Pattern detection | ✅ | Clustering algorithm |
+| Complaint generation | ✅ | Claude AI |
+| PDF export | ✅ | jsPDF generation |
+| Graceful degradation flag | ❌ | Keyword fallback exists but no flag |
 
-### P1 - High Priority
+**Gaps:**
+- ❌ **Degraded mode flag** - Document mentions degraded mode for AI unavailability
 
-5. ~~**Add audit logging to all data mutations**~~ ✅ DONE
-   - Patterns: CREATE, UPDATE, DELETE logged
-   - Generator: CREATE, DELETE logged
-   - Uses logDataModification() from audit-logging.ts
+---
 
-6. ~~**Implement circuit breaker for external APIs**~~ ✅ DONE
-   - Created src/lib/resilience/circuit-breaker.ts
-   - Configs for OpenAI, Anthropic, NHTSA, Stripe
-   - States: CLOSED → OPEN → HALF_OPEN → CLOSED
-   - withCircuitBreaker() and withCircuitBreakerAndFallback() utilities
+## 06-file-structure.md - File Structure
 
-7. ~~**Implement retry logic with exponential backoff**~~ ✅ DONE
-   - Created src/lib/resilience/retry.ts
-   - Exponential backoff with jitter
-   - Configs for all external API types
-   - withRetry() and makeRetryable() utilities
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Next.js App Router structure | ✅ | Proper organization |
+| API routes organization | ✅ | Under src/app/api |
+| Component organization | ✅ | Feature-based |
+| Library organization | ✅ | src/lib/* |
+| Test file colocation | ✅ | __tests__ folders |
 
-### P2 - Medium Priority
+**Gaps:** None
 
-8. ~~**Switch to cursor-based pagination**~~ ✅ DONE (Iteration 4)
-   - Created src/lib/api/cursor-pagination.ts
-   - Hybrid pagination supports both cursor and offset
-   - Integrated in: complaints/route.ts, patterns/route.ts, generator/route.ts
-   - Returns: hasMore, nextCursor, prevCursor, page, limit, total, totalPages
+---
 
-9. ~~**Add idempotency key support**~~ ✅ DONE (Iteration 4)
-   - Created src/lib/api/idempotency.ts
-   - POST /api/generator checks Idempotency-Key header
-   - Caches response for 24 hours
-   - Returns X-Idempotency-Replay: true on replay
+## 07-dependencies.md - Dependencies
 
-10. ~~**Add deep health check endpoint**~~ ✅ DONE
-    - GET /api/health/deep - Full system check
-    - Database read/write capability tests
-    - External service connectivity checks
-    - Circuit breaker state monitoring
-    - Memory usage tracking
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Next.js 15+ | ✅ | App Router |
+| Prisma ORM | ✅ | PostgreSQL |
+| Clerk Auth | ✅ | Authentication |
+| Stripe | ✅ | Billing |
+| OpenAI SDK | ✅ | Embeddings |
+| Anthropic SDK | ✅ | Generation |
+| shadcn/ui | ✅ | Components |
+| Tailwind CSS | ✅ | Styling |
+| Vitest | ✅ | Testing |
+| Playwright | ✅ | E2E testing |
+
+**Gaps:** None
+
+---
+
+## 08-deployment.md - Deployment
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Vercel deployment | ✅ | Configured |
+| Environment variables | ✅ | Documented |
+| Database (Supabase) | ✅ | PostgreSQL |
+| Cron jobs | ✅ | 2 configured |
+| Security headers | ⚠️ | Missing CSP |
+| Health endpoints | ✅ | Multiple levels |
+| Timeout configurations | ❌ | Not explicitly configured |
+
+**Gaps:**
+- ❌ **Content-Security-Policy header** - Not configured in vercel.json
+- ❌ **Webhook cleanup cron** - No /api/cron/cleanup-webhooks
+- ❌ **Timeout configurations** - Doc mentions configurable timeouts
+- ⚠️ **Rate limiting storage** - In-memory only, needs Redis for production
+
+---
+
+## 09-security-compliance.md - Security & Compliance
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| JWT verification | ✅ | Clerk |
+| Tenant isolation | ✅ | organizationId checks |
+| Webhook signature verification | ✅ | Svix/Stripe |
+| Webhook timestamp validation | ✅ | 5-minute window |
+| Webhook idempotency | ✅ | ProcessedWebhook table |
+| SQL injection prevention | ✅ | Prisma parameterized |
+| XSS prevention | ✅ | React escaping |
+| Security headers | ⚠️ | Missing CSP |
+| Audit logging | ✅ | logDataModification |
+| Content hashing | ✅ | SHA-256 on generation |
+| Legal hold enforcement | ✅ | DELETE prevention |
+| MFA/Step-up auth | ❌ | Document mentions "Step-up Auth Required" |
+| Sign-in rate limiting | ❌ | `/api/auth/*` 10/min/IP |
+| Data masking | ❌ | Layer 4 mentions data masking |
+
+**Gaps:**
+- ❌ **Content-Security-Policy** - Not configured
+- ❌ **MFA/Step-up authentication** - For suspicious sessions
+- ❌ **Sign-in rate limiting** - Brute force prevention at `/api/auth/*`
+- ❌ **Data masking** - Not implemented (mentioned in Layer 4 of defense-in-depth)
+- 📋 **Secret rotation** - Operational (managed by Vercel/Clerk/Stripe)
+
+---
+
+## 10-ai-governance.md - AI Governance (SIGNIFICANT GAPS)
+
+### Model & Versioning
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Human-in-the-loop workflow | ✅ | DRAFT → FINALIZED |
+| Version tracking (GeneratedComplaint) | ✅ | version field |
+| Content hash integrity | ✅ | SHA-256 on creation |
+| Cannot delete FINALIZED | ✅ | Status check |
+| Grounded in data | ✅ | Uses NHTSA complaints |
+| AIVersion table | ❌ | For model/prompt version tracking |
+| Model version in GeneratedComplaint | ❌ | modelVersion field missing |
+| Prompt version tracking | ❌ | promptVersion field missing |
+
+### Embedding Pipeline
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Embedding generation | ✅ | OpenAI text-embedding-3-small |
+| Embedding quality assurance | ❌ | Dimension/norm validation missing |
+| Embedding drift detection | ❌ | Baseline comparison not implemented |
+
+### Clustering Reproducibility
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Fixed random seed | ✅ | Clustering uses deterministic seed |
+| Versioned algorithm | ❌ | No algorithm version stored |
+| ClusteringRun audit table | ❌ | Not implemented |
+| Parameter documentation | 📋 | Documented in code |
+
+### AI Output Validation
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| JSON schema validation | ⚠️ | Basic validation only |
+| Length validation | ⚠️ | Not per-section |
+| PII detection & redaction | ❌ | Pattern matching not implemented |
+| Harmful content check | ❌ | Not implemented |
+| Completeness check | ⚠️ | Partial |
+
+### Cost Management
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| AI cost tracking | ❌ | No budget monitoring |
+| Cost alerts at 80%/100% | ❌ | Not implemented |
+| Rate limiting by plan | ✅ | Plan-based limits exist |
+
+### Bias Monitoring
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Clustering fairness | ❌ | No statistical parity check |
+| Generation consistency | ❌ | No same-input verification |
+| Severity scoring fairness | ❌ | No calibration check |
+
+**Gaps Summary for AI Governance:**
+- ❌ **AIVersion schema/table** - Store model/prompt versions
+- ❌ **Model version in GeneratedComplaint** - Track which model version used
+- ❌ **Prompt version tracking** - Track which prompt template used
+- ❌ **Content hash verification on retrieval** - Hash stored but not verified
+- ❌ **Embedding quality assurance** - Validate dimensions (1536) and L2 norm
+- ❌ **Embedding drift detection** - Compare against baseline
+- ❌ **ClusteringRun audit table** - Log clustering runs for reproducibility
+- ❌ **PII detection & redaction** - Scan for SSN, phone, email, credit card
+- ❌ **AI cost tracking** - Monitor token usage against budget
+- ❌ **Hallucination detection logging** - No explicit logging
+- ❌ **Bias monitoring** - No fairness checks
+
+---
+
+## 11-operational-runbooks.md - Operations
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Health check endpoints | ✅ | 4 levels |
+| Circuit breaker pattern | ✅ | Implemented |
+| Retry logic | ✅ | Exponential backoff |
+| Incident response docs | 📋 | Documentation only |
+| SLO definitions | 📋 | Documentation only |
+
+**Gaps:** None for code implementation
+
+---
+
+## 12-reliability-scalability.md - Reliability
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Health checks | ✅ | basic, db, services, deep |
+| Circuit breaker | ✅ | src/lib/resilience/circuit-breaker.ts |
+| Retry with backoff | ✅ | src/lib/resilience/retry.ts |
+| Rate limiting | ✅ | src/lib/api/rate-limit.ts |
+| Graceful degradation | ⚠️ | Keyword search fallback exists |
+| Cache-aside pattern | ❌ | Not implemented |
+| Timeout configurations | ❌ | Not explicitly set per service |
+
+**Gaps:**
+- ⚠️ **Redis-backed rate limiting** - In-memory only for now
+- ❌ **Cache-aside pattern** - Not implemented
+- ❌ **Service timeout configurations** - Per-service timeout config
+
+---
+
+## 13-testing-development.md - Testing & Development
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Unit tests | ✅ | 457 tests |
+| Integration tests | ✅ | API route tests |
+| E2E tests | ✅ | Playwright specs |
+| Test utilities | ✅ | Mocks, fixtures |
+| CI/CD pipeline | ✅ | GitHub Actions |
+| Local dev setup | ✅ | Docker compose |
+| Feature flags system | ❌ | Not implemented |
+| Accessibility testing | ❌ | axe-core integration missing |
+
+**Gaps:**
+- ❌ **Feature flags system** - Missing:
+  - `src/lib/feature-flags/config.ts` - Flag definitions
+  - `useFeatureFlag()` hook - Client-side flag checking
+  - `isFeatureEnabled()` - Server-side flag checking
+  - Flag types: release, experiment, ops, permission
+- ❌ **Accessibility testing** - No axe-core/Playwright accessibility tests
+- ❌ **Per-plan entitlements** - Feature-plan mapping not implemented
+
+---
+
+## 14-monitoring-observability.md - Monitoring (SIGNIFICANT GAPS)
+
+### Logging
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Console logging | ✅ | console.error in routes |
+| Audit logging | ✅ | AuditLog model + utility |
+| Structured JSON logging | ❌ | Uses console.log, not JSON |
+| requestId in logs | ❌ | No correlation ID |
+| Log levels (ERROR, WARN, INFO, DEBUG) | ⚠️ | Basic only |
+
+### Tracing
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Request tracing | ❌ | No OpenTelemetry |
+| Correlation IDs | ❌ | x-trace-id not propagated |
+| Span creation | ❌ | withSpan utility missing |
+
+### Metrics
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Custom metrics collection | ❌ | src/lib/monitoring/metrics.ts missing |
+| AI metrics tracking | ❌ | Token usage, generation time |
+| Business metrics | ❌ | DAU, searches/day, exports |
+
+### SLI/SLO Monitoring
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| SLI definitions in code | ❌ | Documentation only |
+| SLO tracking | ❌ | No error budget calculation |
+| Error budget alerts | ❌ | No automated alerts |
+
+### Health Checks
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Health endpoints | ✅ | For external monitoring |
+| RFC 7807 errors | ✅ | Machine-readable |
+
+**Gaps Summary for Monitoring:**
+- ❌ **Structured logging** - Need `src/lib/monitoring/logger.ts` with JSON format
+- ❌ **Request tracing (correlation IDs)** - Need `src/lib/monitoring/tracing.ts` with OpenTelemetry
+- ❌ **Custom metrics** - Need `src/lib/monitoring/metrics.ts` with Vercel Analytics
+- ❌ **SLI/SLO tracking in code** - Need error budget calculation and tracking
+- ❌ **Error budget alerts** - Automated alerts when budget depleted
+
+---
+
+## 15-threat-model.md - Threat Model
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Webhook replay prevention | ✅ | ProcessedWebhook + timestamp |
+| Cross-tenant isolation | ✅ | organizationId checks |
+| Input validation | ✅ | Prisma + Zod where used |
+| Rate limiting | ✅ | Implemented |
+| Security headers | ⚠️ | Missing CSP |
+| Brute force prevention | ❌ | Sign-in rate limiting missing |
+
+**Gaps:**
+- ❌ **Content-Security-Policy** - Critical security header missing
+- ❌ **Sign-in rate limiting** - `/api/auth/*` 10/min/IP
+
+---
+
+## 16-data-governance.md - Data Governance (CRITICAL GAPS)
+
+### GDPR Data Subject Rights
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Data export endpoint | ❌ | `/api/settings/export-data` missing |
+| Account deletion endpoint | ❌ | `/api/settings/delete-account` missing |
+| Soft delete support | ❌ | No deletedAt/isDeleted fields |
+| 30-day DSAR response | 📋 | Process documentation only |
+
+### e-Discovery Support
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Discovery export API | ❌ | `/api/discovery/export-data` missing |
+| Export formats (JSON, CSV, PDF) | ❌ | Not implemented |
+| Chain of custody hashing | ❌ | Not implemented |
+| Date range filtering | ❌ | Not implemented |
+
+### Legal Holds Management
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| LegalHold model | ✅ | Exists in schema |
+| LegalHoldScope model | ✅ | Exists in schema |
+| Legal hold API endpoints | ❌ | No CRUD endpoints |
+| Hold workflow (issued→active→released) | ❌ | Not implemented |
+
+### Data Retention
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Retention schedule | ❌ | Not implemented |
+| Cleanup cron job | ❌ | `/api/cron/cleanup-retention` missing |
+| Soft delete → hard delete flow | ❌ | Not implemented |
+| Cascading deletion | ❌ | Not implemented |
+
+### Data Residency
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| EU data residency | ❌ | Hardcoded to iad1 (US) |
+| UK data residency | ❌ | Not configurable |
+| Regional deployment | ❌ | No IaC for regions |
+
+**Critical Gaps Summary:**
+- ❌ **GET /api/settings/export-data** - GDPR Article 20 (data portability)
+- ❌ **DELETE /api/settings/delete-account** - GDPR Article 17 (right to erasure)
+- ❌ **GET /api/discovery/export-data** - e-Discovery support
+- ❌ **CRUD /api/legal-holds** - Legal hold management
+- ❌ **GET /api/cron/cleanup-retention** - Data retention enforcement
+
+---
+
+## 17-business-continuity.md - Business Continuity
+
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Backup procedures | 📋 | Supabase handles |
+| Disaster recovery | 📋 | Vercel + Supabase |
+| SLA definitions | 📋 | Documentation only |
+| SLA credit calculation | ❌ | Not implemented |
+| Status page integration | ❌ | status.caseradar.com not set up |
+| Incident escalation tracking | ❌ | Not implemented |
+| Automated SLA breach alerts | ❌ | Not implemented |
+
+**Gaps:**
+- ❌ **SLA management system** - No tracking or credit calculation
+- ❌ **Status page** - No public status page
+- ❌ **Incident tracking** - No system for escalation
+- ❌ **SLA breach alerts** - No automated notifications
+
+---
+
+## Gap Summary by Priority
+
+### P0 - Critical (Legal/Compliance Risk)
+
+| Gap | Document | Endpoint/Feature |
+|-----|----------|------------------|
+| GDPR data export | 16-data-governance.md | GET /api/settings/export-data |
+| GDPR account deletion | 16-data-governance.md | DELETE /api/settings/delete-account |
+| e-Discovery export | 16-data-governance.md | GET /api/discovery/export-data |
+| Legal holds API | 16-data-governance.md | CRUD /api/legal-holds |
+| CSP security header | 08-deployment.md | vercel.json configuration |
+
+### P1 - High (Operational Risk)
+
+| Gap | Document | Endpoint/Feature |
+|-----|----------|------------------|
+| Feature flags system | 13-testing-development.md | src/lib/feature-flags/* |
+| Data retention scheduler | 16-data-governance.md | GET /api/cron/cleanup-retention |
+| Webhook cleanup cron | 08-deployment.md | GET /api/cron/cleanup-webhooks |
+| Health check (AI services) | 02-api-routes.md | OpenAI/Anthropic in /api/health/services |
+| Per-endpoint rate limiting | 02-api-routes.md | Specific limits per endpoint |
+| AIVersion table | 10-ai-governance.md | Model/prompt version tracking |
+| ClusteringRun audit table | 10-ai-governance.md | Clustering reproducibility |
+| PII detection & redaction | 10-ai-governance.md | AI output validation |
+| Degraded mode flag | 05-data-flow.md | AI service unavailability handling |
+
+### P2 - Medium (Quality/Scale)
+
+| Gap | Document | Endpoint/Feature |
+|-----|----------|------------------|
+| Redis-backed rate limiting | 12-reliability-scalability.md | Replace in-memory store |
+| Content hash verification | 10-ai-governance.md | Verify on retrieval |
+| AI model version tracking | 10-ai-governance.md | modelVersion field in GeneratedComplaint |
+| Structured logging | 14-monitoring-observability.md | JSON logging format with requestId |
+| Request tracing | 14-monitoring-observability.md | OpenTelemetry correlation IDs |
+| Custom metrics | 14-monitoring-observability.md | src/lib/monitoring/metrics.ts |
+| Sign-in rate limiting | 04-authentication.md | `/api/auth/*` 10/min/IP |
+| MFA enforcement | 04-authentication.md | Step-up auth for admins |
+| Embedding quality assurance | 10-ai-governance.md | Dimension/norm validation |
+| Embedding drift detection | 10-ai-governance.md | Baseline comparison |
+| AI cost tracking | 10-ai-governance.md | Token usage budget monitoring |
+| Accessibility testing | 13-testing-development.md | axe-core integration |
+| SLI/SLO tracking code | 14-monitoring-observability.md | Error budget calculation |
+
+### P3 - Low (Nice to Have)
+
+| Gap | Document | Endpoint/Feature |
+|-----|----------|------------------|
+| SLA management | 17-business-continuity.md | Tracking and credits |
+| Status page | 17-business-continuity.md | Public status page |
+| Data residency | 16-data-governance.md | EU/UK regions |
+| Per-plan entitlements | 13-testing-development.md | Feature-plan mapping |
+| Cache-aside pattern | 12-reliability-scalability.md | Response caching |
+| Timeout configurations | 12-reliability-scalability.md | Per-service timeouts |
+| Data masking | 09-security-compliance.md | PII masking in logs |
+| Bias monitoring | 10-ai-governance.md | Fairness checks |
+
+---
+
+## Implementation Status
+
+### Fully Implemented Documents
+- ✅ 00-overview.md
+- ✅ 03-frontend-components.md
+- ✅ 06-file-structure.md
+- ✅ 07-dependencies.md
+- ✅ 11-operational-runbooks.md
+
+### Partially Implemented Documents
+- ⚠️ 01-database-schema.md (missing AIVersion, ClusteringRun tables)
+- ⚠️ 02-api-routes.md (missing per-endpoint rate limits, AI health checks)
+- ⚠️ 04-authentication.md (missing MFA, sign-in rate limiting)
+- ⚠️ 05-data-flow.md (missing degraded mode flag)
+- ⚠️ 08-deployment.md (missing CSP, webhook cleanup)
+- ⚠️ 09-security-compliance.md (missing CSP, MFA, sign-in rate limiting)
+- ⚠️ 12-reliability-scalability.md (in-memory rate limiting, no cache-aside)
+- ⚠️ 15-threat-model.md (missing CSP, brute force prevention)
+
+### Significant Gaps Documents
+- ❌ 10-ai-governance.md (model versioning, PII detection, cost tracking, drift detection)
+- ❌ 13-testing-development.md (feature flags, accessibility testing)
+- ❌ 14-monitoring-observability.md (structured logging, tracing, metrics, SLI/SLO)
+- ❌ 16-data-governance.md (GDPR, e-Discovery, legal holds not implemented)
+- ❌ 17-business-continuity.md (SLA management not implemented)
 
 ---
 
 ## Verification Checklist
 
-- [x] Build passes (`npm run build`) ✅
-- [x] Tests pass (`npm test`) - 457 tests passing ✅
-- [x] P0 tasks ALL complete ✅ (rate limiting, content hash, legal hold, RFC 7807)
-- [x] P1 tasks ALL complete ✅ (audit logging, circuit breaker, retry)
-- [x] P2 tasks ALL complete ✅ (cursor pagination, idempotency, deep health check)
-- [x] Health check endpoints implemented (basic, db, services, deep) ✅
-- [ ] Webhook handlers tested (needs manual verification)
-- [ ] End-to-end flow tested (needs manual verification)
-
-**All implementation gaps resolved ✅**
+- [x] All 18 architecture documents reviewed (00-17)
+- [x] Database schema gaps identified (AIVersion, ClusteringRun)
+- [x] API endpoint gaps identified (per-endpoint rate limits, AI health)
+- [x] Authentication gaps identified (MFA, sign-in rate limiting)
+- [x] Security gaps identified (CSP, data masking)
+- [x] AI governance gaps identified (versioning, PII, cost tracking, drift)
+- [x] Monitoring gaps identified (logging, tracing, metrics, SLI/SLO)
+- [x] Compliance gaps identified (GDPR, e-Discovery, legal holds)
+- [x] Feature flags gap documented
+- [x] Accessibility testing gap documented
+- [x] Priority summary complete (P0-P3)
+- [ ] GDPR compliance APIs implemented
+- [ ] e-Discovery support implemented
+- [ ] Legal holds management API implemented
+- [ ] Feature flags system implemented
+- [ ] CSP header configured
+- [ ] All cron jobs implemented
+- [ ] Complete health checks implemented
+- [ ] Structured logging implemented
+- [ ] Request tracing implemented
 
 ---
 
-## Progress Log
+## Next Steps
 
-### Iteration 4 (2026-01-14)
-- ✅ Deep health check endpoint implemented (/api/health/deep)
-- ✅ Checks: database read/write, external services, circuit breakers, memory
-- ✅ RFC 7807 error format integrated across ALL API routes
-  - patterns/route.ts (GET, POST)
-  - patterns/[id]/route.ts (GET, PATCH, DELETE)
-  - generator/route.ts (GET, POST)
-  - generator/[id]/route.ts (GET, DELETE)
-  - complaints/route.ts (GET)
-  - complaints/[id]/route.ts (GET)
-- ✅ Cursor-based pagination implemented (hybrid format)
-  - Created src/lib/api/cursor-pagination.ts
-  - Integrated in complaints, patterns, generator routes
-- ✅ Idempotency key support implemented
-  - Created src/lib/api/idempotency.ts
-  - POST /api/generator supports Idempotency-Key header
-- ✅ All 457 tests passing
-- ✅ Build passing
-- **Status:** ALL P0, P1, P2 tasks COMPLETE
+1. **Implement P0 (Critical) gaps** - Legal/compliance requirements
+   - GDPR data export/deletion APIs
+   - e-Discovery export
+   - Legal holds API
+   - CSP header
 
-### Iteration 3 (2026-01-14)
-- ✅ Audit logging integrated into patterns and generator routes
-- ✅ Circuit breaker pattern implemented (src/lib/resilience/circuit-breaker.ts)
-- ✅ Retry logic with exponential backoff implemented (src/lib/resilience/retry.ts)
-- ✅ All 457 tests passing
-- ✅ Build passing
+2. **Implement P1 (High) gaps** - Operational stability
+   - Feature flags system
+   - AI versioning tables
+   - PII detection
+   - Per-endpoint rate limiting
 
-### Iteration 2 (2026-01-14)
-- ✅ Content hashing integrated into generator
-- ✅ Legal hold checks added to DELETE endpoints (patterns, generator)
-- ✅ Rate limiting integrated into key API routes (generator, complaints, PDF)
-- ✅ All 415 tests passing
-- ✅ Build passing
-- **Remaining:** Some P1/P2 items, but core P0 tasks complete
+3. **Implement P2 (Medium) gaps** - Quality improvements
+   - Structured logging
+   - Request tracing
+   - MFA enforcement
+   - AI cost tracking
 
-### Iteration 1 (2026-01-14)
-- Created gap analysis
-- Database schema complete ✅
-- Database migration applied ✅
-- Security headers configured ✅
-- Webhook security implemented ✅
-- Utility files created (rate-limit, content-hash, rfc7807-errors)
-- **Remaining:** Integration of utilities into actual API routes
+4. **Consider P3 (Low) gaps** - Production readiness
+   - SLA management
+   - Status page
+   - Data residency
+
+5. **Re-run gap analysis after implementation**
+
+---
+
+## Gap Count Summary
+
+| Priority | Count | Categories |
+|----------|-------|------------|
+| P0 Critical | 5 | GDPR, e-Discovery, Legal, CSP |
+| P1 High | 9 | Feature flags, Retention, AI governance |
+| P2 Medium | 13 | Logging, Tracing, Auth, AI monitoring |
+| P3 Low | 8 | SLA, Status page, Data residency |
+| **Total** | **35** | |
+
