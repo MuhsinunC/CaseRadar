@@ -45,28 +45,42 @@ export async function GET(request: NextRequest) {
       generatedComplaints,
       complaintsByMake,
     ] = await Promise.all([
-      // Total patterns for org
+      // Total patterns (global or org-specific)
       prisma.pattern.count({
-        where: { organizationId: user.organizationId },
+        where: {
+          OR: [
+            { organizationId: user.organizationId },
+            { organizationId: null },
+          ],
+        },
       }),
       // High severity patterns (>= 7)
       prisma.pattern.count({
         where: {
-          organizationId: user.organizationId,
+          OR: [
+            { organizationId: user.organizationId },
+            { organizationId: null },
+          ],
           severityScore: { gte: 7 },
         },
       }),
       // Upward trending patterns
       prisma.pattern.count({
         where: {
-          organizationId: user.organizationId,
+          OR: [
+            { organizationId: user.organizationId },
+            { organizationId: null },
+          ],
           trendDirection: 'INCREASING',
         },
       }),
       // Patterns created in period
       prisma.pattern.count({
         where: {
-          organizationId: user.organizationId,
+          OR: [
+            { organizationId: user.organizationId },
+            { organizationId: null },
+          ],
           createdAt: { gte: startDate },
         },
       }),
@@ -91,7 +105,17 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // Return in flat format expected by dashboard component
     return NextResponse.json({
+      totalComplaints: totalComplaints,
+      complaintsChange: 0, // TODO: Calculate actual change
+      activePatterns: totalPatterns,
+      patternsChange: 0, // TODO: Calculate actual change
+      generatedComplaints: generatedComplaints,
+      generatedChange: 0,
+      highSeverityPatterns: highSeverityPatterns,
+      severityChange: 0,
+      // Also include detailed stats for future use
       stats: {
         patterns: {
           total: totalPatterns,

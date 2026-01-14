@@ -261,9 +261,9 @@ export function GeneratedList({
                 </p>
               </div>
               <div className="col-span-2 text-sm">
-                <p>{complaint.plaintiffInfo.name}</p>
+                <p>{complaint.plaintiffInfo?.name || 'N/A'}</p>
                 <p className="text-muted-foreground text-xs">
-                  {complaint.plaintiffInfo.state}
+                  {complaint.plaintiffInfo?.state || 'N/A'}
                 </p>
               </div>
               <div className="col-span-1 flex gap-1">

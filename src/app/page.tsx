@@ -28,11 +28,11 @@ export default function Home() {
             <span className="text-xl font-bold">CaseRadar</span>
           </div>
           <nav className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium hover:underline">
+            <Link href="/sign-in" className="text-sm font-medium hover:underline">
               Login
             </Link>
             <Button asChild>
-              <Link href="/register">Get Started</Link>
+              <Link href="/sign-up">Get Started</Link>
             </Button>
           </nav>
         </div>
@@ -55,7 +55,7 @@ export default function Home() {
           </p>
           <div className="flex justify-center gap-4">
             <Button size="lg" asChild>
-              <Link href="/register">Start Free Trial</Link>
+              <Link href="/sign-up">Start Free Trial</Link>
             </Button>
             <Button size="lg" variant="outline" asChild>
               <Link href="#features">Learn More</Link>

@@ -46,6 +46,7 @@ export type AuthenticatedHandler = (
 
 /**
  * Get current authenticated user with database info
+ * Auto-provisions users in development if they don't exist
  */
 export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   const authResult = await auth();
@@ -54,15 +55,52 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     return null;
   }
 
-  const user = await prisma.user.findUnique({
+  let user = await prisma.user.findUnique({
     where: { clerkUserId: authResult.userId },
     include: {
       organization: true,
     },
   });
 
+  // Auto-provision user if they don't exist (dev mode)
   if (!user) {
-    return null;
+    // Get user info from Clerk
+    const clerkUser = await currentUser();
+    if (!clerkUser) {
+      return null;
+    }
+
+    const email = clerkUser.emailAddresses?.[0]?.emailAddress || `user-${authResult.userId}@caseradar.local`;
+
+    // Find or create default organization
+    let defaultOrg = await prisma.organization.findFirst({
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!defaultOrg) {
+      defaultOrg = await prisma.organization.create({
+        data: {
+          name: 'Default Organization',
+          clerkOrgId: `org_default_${Date.now()}`,
+          plan: 'PRO',
+        },
+      });
+    }
+
+    // Create the user
+    user = await prisma.user.create({
+      data: {
+        clerkUserId: authResult.userId,
+        email,
+        role: 'ADMIN', // First user gets admin
+        organizationId: defaultOrg.id,
+      },
+      include: {
+        organization: true,
+      },
+    });
+
+    console.log(`Auto-provisioned user ${email} in organization ${defaultOrg.name}`);
   }
 
   return {
