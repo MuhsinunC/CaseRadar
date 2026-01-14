@@ -11,6 +11,7 @@ import { checkPlanLimit } from '@/lib/billing';
 import { generateComplaintDocument } from '@/lib/complaint';
 import { generateContentHash } from '@/lib/security/content-hash';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
+import { logDataModification } from '@/lib/security/audit-logging';
 import { ComplaintStatus } from '@prisma/client';
 
 /**
@@ -167,6 +168,16 @@ export async function POST(request: NextRequest) {
         createdBy: user.id,
       },
     });
+
+    // Audit log: generated complaint created
+    await logDataModification(
+      user.id,
+      user.organizationId,
+      'GENERATED_COMPLAINT',
+      complaint.id,
+      'CREATE',
+      { after: { title: complaint.title, patternId: pattern.id } }
+    );
 
     return addRateLimitHeaders(
       NextResponse.json({ complaint }, { status: 201 }),

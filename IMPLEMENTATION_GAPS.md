@@ -159,17 +159,22 @@ This document tracks implementation gaps between the architecture documentation 
 
 ### P1 - High Priority
 
-5. **Add audit logging to all data mutations**
-   - All POST, PATCH, DELETE handlers
-   - Log: action, resource, resourceId, userId, organizationId
+5. ~~**Add audit logging to all data mutations**~~ ✅ DONE
+   - Patterns: CREATE, UPDATE, DELETE logged
+   - Generator: CREATE, DELETE logged
+   - Uses logDataModification() from audit-logging.ts
 
-6. **Implement circuit breaker for external APIs**
-   - OpenAI, Anthropic, NHTSA, Stripe
-   - Follow config from 12-reliability-scalability.md
+6. ~~**Implement circuit breaker for external APIs**~~ ✅ DONE
+   - Created src/lib/resilience/circuit-breaker.ts
+   - Configs for OpenAI, Anthropic, NHTSA, Stripe
+   - States: CLOSED → OPEN → HALF_OPEN → CLOSED
+   - withCircuitBreaker() and withCircuitBreakerAndFallback() utilities
 
-7. **Implement retry logic with exponential backoff**
-   - All external API calls
-   - Configurable max retries, base delay, jitter
+7. ~~**Implement retry logic with exponential backoff**~~ ✅ DONE
+   - Created src/lib/resilience/retry.ts
+   - Exponential backoff with jitter
+   - Configs for all external API types
+   - withRetry() and makeRetryable() utilities
 
 ### P2 - Medium Priority
 
@@ -199,6 +204,14 @@ This document tracks implementation gaps between the architecture documentation 
 ---
 
 ## Progress Log
+
+### Iteration 3 (2026-01-14)
+- ✅ Audit logging integrated into patterns and generator routes
+- ✅ Circuit breaker pattern implemented (src/lib/resilience/circuit-breaker.ts)
+- ✅ Retry logic with exponential backoff implemented (src/lib/resilience/retry.ts)
+- ✅ All 457 tests passing
+- ✅ Build passing
+- **Remaining:** P2 items (cursor pagination, idempotency keys, deep health check)
 
 ### Iteration 2 (2026-01-14)
 - ✅ Content hashing integrated into generator

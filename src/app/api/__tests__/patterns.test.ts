@@ -37,6 +37,9 @@ vi.mock('@/lib/db', () => ({
     legalHoldScope: {
       findFirst: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
   },
 }));
 

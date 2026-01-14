@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logDataModification } from '@/lib/security/audit-logging';
 
 interface RouteParams {
   params: Promise<{
@@ -109,6 +110,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     await prisma.generatedComplaint.delete({
       where: { id },
     });
+
+    // Audit log: generated complaint deleted
+    await logDataModification(
+      user.id,
+      user.organizationId,
+      'GENERATED_COMPLAINT',
+      id,
+      'DELETE',
+      { before: { title: complaint.title, status: complaint.status } }
+    );
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

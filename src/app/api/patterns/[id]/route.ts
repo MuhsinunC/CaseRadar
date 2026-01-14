@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { TrendDirection } from '@prisma/client';
+import { logDataModification } from '@/lib/security/audit-logging';
 
 interface RouteParams {
   params: Promise<{
@@ -258,6 +259,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    // Audit log: pattern updated
+    await logDataModification(
+      user.id,
+      user.organizationId,
+      'PATTERN',
+      pattern.id,
+      'UPDATE',
+      {
+        before: { name: existing.name, description: existing.description },
+        after: { name: pattern.name, description: pattern.description },
+      }
+    );
+
     return NextResponse.json({ pattern });
   } catch (error) {
     console.error('Error updating pattern:', error);
@@ -326,6 +340,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     await prisma.pattern.delete({
       where: { id },
     });
+
+    // Audit log: pattern deleted
+    await logDataModification(
+      user.id,
+      user.organizationId,
+      'PATTERN',
+      id,
+      'DELETE',
+      { before: { name: existing.name, make: existing.make, model: existing.model } }
+    );
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

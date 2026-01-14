@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { checkPlanLimit } from '@/lib/billing';
 import { TrendDirection } from '@prisma/client';
+import { logDataModification } from '@/lib/security/audit-logging';
 
 interface PatternWhereClause {
   organizationId: string;
@@ -319,6 +320,16 @@ export async function POST(request: NextRequest) {
           : undefined,
       },
     });
+
+    // Audit log: pattern created
+    await logDataModification(
+      user.id,
+      user.organizationId,
+      'PATTERN',
+      pattern.id,
+      'CREATE',
+      { after: { name: pattern.name, make: pattern.make, model: pattern.model } }
+    );
 
     return NextResponse.json({ pattern }, { status: 201 });
   } catch (error) {

@@ -38,6 +38,9 @@ vi.mock('@/lib/db', () => ({
     complaint: {
       findMany: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
   },
 }));
 
