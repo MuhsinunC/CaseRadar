@@ -103,7 +103,7 @@ erDiagram
 
     Subscription {
         string id PK "cuid()"
-        string organizationId FK UK
+        string organizationId FK "unique"
         string stripeCustomerId UK
         string stripeSubscriptionId UK "nullable"
         string stripePriceId "nullable"

@@ -838,12 +838,7 @@ sequenceDiagram
 
     DB-->>API: Aggregated counts
 
-    API-->>Dashboard: {
-        totalComplaints,
-        activePatterns,
-        totalImpact,
-        trendingPatterns
-    }
+    API-->>Dashboard: Stats response
 ```
 
 ### Activity Feed Flow
