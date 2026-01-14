@@ -76,8 +76,8 @@ model Complaint {
   failDate     DateTime?
   dateAdded    DateTime
 
-  // Vector embedding for semantic search (1536 dimensions for text-embedding-3-small)
-  embedding Unsupported("vector(1536)")?
+  // Vector embedding for semantic search (768 dimensions for nomic-embed-text)
+  embedding Unsupported("vector(768)")?
 
   // Cluster/Pattern assignment
   clusterId String?
