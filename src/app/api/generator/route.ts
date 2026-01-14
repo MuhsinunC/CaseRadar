@@ -12,20 +12,10 @@ import { generateComplaintDocument } from '@/lib/complaint';
 import { generateContentHash } from '@/lib/security/content-hash';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { logDataModification } from '@/lib/security/audit-logging';
+import { Problems } from '@/lib/api/rfc7807-errors';
+import { buildHybridPaginationResponse } from '@/lib/api/cursor-pagination';
+import { checkIdempotencyKey, storeIdempotencyResult } from '@/lib/api/idempotency';
 import { ComplaintStatus } from '@prisma/client';
-
-/**
- * Add rate limit headers to a NextResponse
- */
-function addRateLimitHeaders(
-  response: NextResponse,
-  headers: Record<string, string>
-): NextResponse {
-  Object.entries(headers).forEach(([key, value]) => {
-    response.headers.set(key, value);
-  });
-  return response;
-}
 
 interface GeneratedWhereClause {
   organizationId: string;
@@ -36,26 +26,30 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to generate complaints');
+    }
+
+    // Check idempotency key first
+    const idempotencyKey = request.headers.get('Idempotency-Key') || request.headers.get('idempotency-key');
+    const cachedResponse = checkIdempotencyKey(idempotencyKey, user.organizationId);
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     // Rate limiting - generation is expensive (10 req/min)
     const rateLimitKey = `generation:${user.organizationId}:${user.id}`;
     const rateCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.generation);
     if (!rateCheck.allowed) {
-      return addRateLimitHeaders(
-        NextResponse.json(
-          {
-            type: 'https://api.caseradar.com/errors/rate-limited',
-            title: 'Rate Limit Exceeded',
-            status: 429,
-            detail: `Generation rate limit exceeded. Please wait ${Math.ceil((rateCheck.resetAt - Date.now()) / 1000)} seconds.`,
-            retryAfter: Math.ceil((rateCheck.resetAt - Date.now()) / 1000),
-          },
-          { status: 429 }
-        ),
-        rateCheck.headers
+      const retryAfter = Math.ceil((rateCheck.resetAt - Date.now()) / 1000);
+      const response = Problems.rateLimited(
+        retryAfter,
+        `Generation rate limit exceeded. Please wait ${retryAfter} seconds.`
       );
+      // Add additional rate limit headers
+      Object.entries(rateCheck.headers).forEach(([key, value]) => {
+        response.headers.set(key, value);
+      });
+      return response;
     }
 
     // Check feature access
@@ -65,10 +59,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!featureCheck.allowed) {
-      return NextResponse.json(
-        { error: 'Complaint generation not available on your plan' },
-        { status: 403 }
-      );
+      return Problems.forbidden('Complaint generation is not available on your current plan. Upgrade to access this feature.');
     }
 
     // Check monthly limit
@@ -78,11 +69,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (!limitCheck.allowed) {
-      return NextResponse.json(
-        {
-          error: `Monthly complaint limit reached (${limitCheck.current}/${limitCheck.limit})`,
-        },
-        { status: 403 }
+      return Problems.forbidden(
+        `Monthly complaint limit reached (${limitCheck.current}/${limitCheck.limit}). Upgrade your plan for more complaints.`
       );
     }
 
@@ -90,9 +78,9 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!body.patternId) {
-      return NextResponse.json(
-        { error: 'patternId is required' },
-        { status: 400 }
+      return Problems.validationError(
+        { patternId: 'Pattern ID is required' },
+        'A pattern must be specified to generate a complaint'
       );
     }
 
@@ -116,18 +104,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!pattern) {
-      return NextResponse.json(
-        { error: 'Pattern not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('pattern', `Pattern ${body.patternId} not found`);
     }
 
     // Tenant isolation
     if (pattern.organizationId !== user.organizationId) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      );
+      return Problems.forbidden('You do not have access to this pattern');
     }
 
     // Generate complaint document
@@ -179,16 +161,21 @@ export async function POST(request: NextRequest) {
       { after: { title: complaint.title, patternId: pattern.id } }
     );
 
-    return addRateLimitHeaders(
-      NextResponse.json({ complaint }, { status: 201 }),
-      rateCheck.headers
-    );
+    const response = NextResponse.json({ complaint }, { status: 201 });
+    // Add rate limit headers
+    Object.entries(rateCheck.headers).forEach(([key, value]) => {
+      response.headers.set(key, value);
+    });
+
+    // Store idempotency result if key was provided
+    if (idempotencyKey) {
+      await storeIdempotencyResult(idempotencyKey, user.organizationId, response);
+    }
+
+    return response;
   } catch (error) {
     console.error('Error generating complaint:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate complaint' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to generate complaint');
   }
 }
 
@@ -196,7 +183,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to list generated complaints');
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -235,20 +222,20 @@ export async function GET(request: NextRequest) {
       prisma.generatedComplaint.count({ where }),
     ]);
 
+    // Build hybrid pagination response (supports both cursor and offset)
+    const pagination = buildHybridPaginationResponse(
+      complaints as Array<{ id: string }>,
+      page,
+      limit,
+      total
+    );
+
     return NextResponse.json({
       complaints,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination,
     });
   } catch (error) {
     console.error('Error fetching generated complaints:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch complaints' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to fetch generated complaints');
   }
 }

@@ -10,6 +10,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { checkPlanLimit } from '@/lib/billing';
 import { TrendDirection } from '@prisma/client';
 import { logDataModification } from '@/lib/security/audit-logging';
+import { Problems } from '@/lib/api/rfc7807-errors';
+import { buildHybridPaginationResponse } from '@/lib/api/cursor-pagination';
 
 interface PatternWhereClause {
   organizationId: string;
@@ -247,24 +249,27 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Map patterns to include complaintCount
+    const mappedPatterns = patterns.map((p) => ({
+      ...p,
+      complaintCount: p._count.complaints,
+    }));
+
+    // Build hybrid pagination response (supports both cursor and offset)
+    const pagination = buildHybridPaginationResponse(
+      mappedPatterns as Array<{ id: string }>,
+      page,
+      limit,
+      total
+    );
+
     return NextResponse.json({
-      patterns: patterns.map((p) => ({
-        ...p,
-        complaintCount: p._count.complaints,
-      })),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      patterns: mappedPatterns,
+      pagination,
     });
   } catch (error) {
     console.error('Error fetching patterns:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch patterns' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to fetch patterns');
   }
 }
 
@@ -272,7 +277,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to create patterns');
     }
 
     // Check plan limits
@@ -282,11 +287,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (!limitCheck.allowed) {
-      return NextResponse.json(
-        {
-          error: `Pattern limit reached (${limitCheck.current}/${limitCheck.limit})`,
-        },
-        { status: 403 }
+      return Problems.forbidden(
+        `Pattern limit reached (${limitCheck.current}/${limitCheck.limit}). Upgrade your plan for more patterns.`
       );
     }
 
@@ -294,9 +296,9 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!body.name) {
-      return NextResponse.json(
-        { error: 'name is required' },
-        { status: 400 }
+      return Problems.validationError(
+        { name: 'Name is required' },
+        'Pattern name must be provided'
       );
     }
 
@@ -334,9 +336,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ pattern }, { status: 201 });
   } catch (error) {
     console.error('Error creating pattern:', error);
-    return NextResponse.json(
-      { error: 'Failed to create pattern' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to create pattern');
   }
 }

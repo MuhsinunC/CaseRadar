@@ -10,6 +10,7 @@ import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { TrendDirection } from '@prisma/client';
 import { logDataModification } from '@/lib/security/audit-logging';
+import { Problems } from '@/lib/api/rfc7807-errors';
 
 interface RouteParams {
   params: Promise<{
@@ -156,15 +157,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       if (demoPattern) {
         return NextResponse.json({ pattern: demoPattern, isDemo: true });
       }
-      return NextResponse.json(
-        { error: 'Pattern not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('pattern', `Demo pattern ${id} not found`);
     }
 
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to view patterns');
     }
 
     const pattern = await prisma.pattern.findUnique({
@@ -184,27 +182,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!pattern) {
-      return NextResponse.json(
-        { error: 'Pattern not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('pattern', `Pattern ${id} not found`);
     }
 
     // Tenant isolation check
     if (pattern.organizationId !== user.organizationId) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      );
+      return Problems.forbidden('You do not have access to this pattern');
     }
 
     return NextResponse.json({ pattern });
   } catch (error) {
     console.error('Error fetching pattern:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch pattern' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to fetch pattern');
   }
 }
 
@@ -212,15 +201,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to update patterns');
     }
 
     // Check role - need ANALYST or ADMIN
     if (user.role === 'VIEWER') {
-      return NextResponse.json(
-        { error: 'Insufficient permissions' },
-        { status: 403 }
-      );
+      return Problems.forbidden('ANALYST or ADMIN role required to update patterns');
     }
 
     const { id } = await params;
@@ -231,17 +217,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: 'Pattern not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('pattern', `Pattern ${id} not found`);
     }
 
     if (existing.organizationId !== user.organizationId) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      );
+      return Problems.forbidden('You do not have access to this pattern');
     }
 
     const body = await request.json();
@@ -275,10 +255,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ pattern });
   } catch (error) {
     console.error('Error updating pattern:', error);
-    return NextResponse.json(
-      { error: 'Failed to update pattern' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to update pattern');
   }
 }
 
@@ -286,15 +263,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to delete patterns');
     }
 
     // Check role - need ADMIN
     if (user.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin role required' },
-        { status: 403 }
-      );
+      return Problems.forbidden('ADMIN role required to delete patterns');
     }
 
     const { id } = await params;
@@ -305,17 +279,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: 'Pattern not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('pattern', `Pattern ${id} not found`);
     }
 
     if (existing.organizationId !== user.organizationId) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      );
+      return Problems.forbidden('You do not have access to this pattern');
     }
 
     // Check for legal hold - patterns under legal hold cannot be deleted
@@ -331,9 +299,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     });
 
     if (legalHold) {
-      return NextResponse.json(
-        { error: 'Cannot delete patterns under legal hold. Contact your administrator to release the hold.' },
-        { status: 403 }
+      return Problems.conflict(
+        'Cannot delete patterns under legal hold. Contact your administrator to release the hold.',
+        { legalHoldActive: true }
       );
     }
 
@@ -354,9 +322,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error('Error deleting pattern:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete pattern' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to delete pattern');
   }
 }

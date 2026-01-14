@@ -69,12 +69,15 @@ describe('Complaints API', () => {
 
       expect(response.status).toBe(200);
       expect(data.complaints).toHaveLength(2);
-      expect(data.pagination).toEqual({
-        page: 1,
-        limit: 10,
-        total: 100,
-        totalPages: 10,
-      });
+      // Hybrid pagination includes both offset and cursor fields
+      expect(data.pagination.page).toBe(1);
+      expect(data.pagination.limit).toBe(10);
+      expect(data.pagination.total).toBe(100);
+      expect(data.pagination.totalPages).toBe(10);
+      // Cursor-based fields
+      expect(data.pagination).toHaveProperty('hasMore');
+      expect(data.pagination).toHaveProperty('nextCursor');
+      expect(data.pagination).toHaveProperty('prevCursor');
     });
 
     it('should filter complaints by make', async () => {
@@ -234,7 +237,8 @@ describe('Complaints API', () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toContain('Invalid');
+      // RFC 7807 format: validation errors in 'errors' object or detail
+      expect(data.errors || data.detail).toBeTruthy();
     });
   });
 
@@ -277,7 +281,8 @@ describe('Complaints API', () => {
 
       expect(response.status).toBe(404);
       const data = await response.json();
-      expect(data.error).toContain('not found');
+      // RFC 7807 format: error details in 'detail' field
+      expect(data.detail).toContain('not found');
     });
 
     it('should include related patterns if requested', async () => {

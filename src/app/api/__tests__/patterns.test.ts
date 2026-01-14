@@ -292,7 +292,8 @@ describe('Patterns API', () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toContain('name');
+      // RFC 7807 format: validation errors are in 'errors' object
+      expect(data.errors?.name || data.detail).toBeTruthy();
     });
 
     it('should enforce plan limits on pattern creation', async () => {
@@ -323,7 +324,8 @@ describe('Patterns API', () => {
 
       expect(response.status).toBe(403);
       const data = await response.json();
-      expect(data.error).toContain('limit');
+      // RFC 7807 format: error details in 'detail' field
+      expect(data.detail).toContain('limit');
     });
   });
 

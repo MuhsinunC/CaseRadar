@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
+import { Problems } from '@/lib/api/rfc7807-errors';
+import { buildHybridPaginationResponse } from '@/lib/api/cursor-pagination';
 
 /**
  * Add rate limit headers to a NextResponse
@@ -67,9 +69,13 @@ export async function GET(request: NextRequest) {
 
     // Validate pagination
     if (page < 1 || limit < 1 || limit > 100) {
-      return NextResponse.json(
-        { error: 'Invalid pagination parameters' },
-        { status: 400 }
+      return Problems.validationError(
+        {
+          ...(page < 1 && { page: 'Page must be at least 1' }),
+          ...(limit < 1 && { limit: 'Limit must be at least 1' }),
+          ...(limit > 100 && { limit: 'Limit cannot exceed 100' }),
+        },
+        'Invalid pagination parameters'
       );
     }
 
@@ -201,15 +207,18 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    // Build hybrid pagination response (supports both cursor and offset)
+    const pagination = buildHybridPaginationResponse(
+      complaints as Array<{ id: string }>,
+      page,
+      limit,
+      total
+    );
+
     return addRateLimitHeaders(
       NextResponse.json({
         complaints,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
+        pagination,
         searchType,
         ...(stats && { stats }),
       }),
@@ -217,9 +226,6 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error fetching complaints:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch complaints' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to fetch complaints');
   }
 }

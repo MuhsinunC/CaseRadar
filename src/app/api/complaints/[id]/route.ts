@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { Problems } from '@/lib/api/rfc7807-errors';
 
 interface RouteParams {
   params: Promise<{
@@ -37,18 +38,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!complaint) {
-      return NextResponse.json(
-        { error: 'Complaint not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('complaint', `Complaint ${id} not found`);
     }
 
     return NextResponse.json({ complaint });
   } catch (error) {
     console.error('Error fetching complaint:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch complaint' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to fetch complaint');
   }
 }

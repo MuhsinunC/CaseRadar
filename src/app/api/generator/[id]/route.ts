@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { logDataModification } from '@/lib/security/audit-logging';
+import { Problems } from '@/lib/api/rfc7807-errors';
 
 interface RouteParams {
   params: Promise<{
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to view generated complaints');
     }
 
     const { id } = await params;
@@ -39,27 +40,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!complaint) {
-      return NextResponse.json(
-        { error: 'Generated complaint not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('generated complaint', `Generated complaint ${id} not found`);
     }
 
     // Tenant isolation
     if (complaint.organizationId !== user.organizationId) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      );
+      return Problems.forbidden('You do not have access to this generated complaint');
     }
 
     return NextResponse.json({ complaint });
   } catch (error) {
     console.error('Error fetching generated complaint:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch complaint' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to fetch generated complaint');
   }
 }
 
@@ -67,7 +59,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Problems.unauthorized('Authentication required to delete generated complaints');
     }
 
     const { id } = await params;
@@ -77,33 +69,27 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!complaint) {
-      return NextResponse.json(
-        { error: 'Generated complaint not found' },
-        { status: 404 }
-      );
+      return Problems.notFound('generated complaint', `Generated complaint ${id} not found`);
     }
 
     // Tenant isolation
     if (complaint.organizationId !== user.organizationId) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      );
+      return Problems.forbidden('You do not have access to this generated complaint');
     }
 
     // Prevent deleting finalized complaints
     if (complaint.status === 'FINALIZED') {
-      return NextResponse.json(
-        { error: 'Cannot delete finalized complaints' },
-        { status: 400 }
+      return Problems.conflict(
+        'Cannot delete finalized complaints. Finalized documents are immutable for legal compliance.',
+        { complaintStatus: complaint.status }
       );
     }
 
     // Check for legal hold - documents under legal hold cannot be deleted
     if (complaint.legalHold) {
-      return NextResponse.json(
-        { error: 'Cannot delete complaints under legal hold. Contact your administrator to release the hold.' },
-        { status: 403 }
+      return Problems.conflict(
+        'Cannot delete complaints under legal hold. Contact your administrator to release the hold.',
+        { legalHoldActive: true }
       );
     }
 
@@ -124,9 +110,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error('Error deleting generated complaint:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete complaint' },
-      { status: 500 }
-    );
+    return Problems.internalError('Failed to delete generated complaint');
   }
 }

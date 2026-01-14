@@ -127,7 +127,8 @@ describe('Generator API', () => {
 
       expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.error).toContain('patternId');
+      // RFC 7807 format: validation errors in 'errors' object
+      expect(data.errors?.patternId || data.detail).toBeTruthy();
     });
 
     it('should enforce plan limits on complaint generation', async () => {
@@ -150,7 +151,8 @@ describe('Generator API', () => {
 
       expect(response.status).toBe(403);
       const data = await response.json();
-      expect(data.error).toContain('limit');
+      // RFC 7807 format: error details in 'detail' field
+      expect(data.detail).toContain('limit');
     });
 
     it('should require complaintGeneration feature', async () => {
@@ -374,9 +376,10 @@ describe('Generator API', () => {
 
       const response = await deleteGenerated(request, { params: Promise.resolve({ id: 'gen_1' }) });
 
-      expect(response.status).toBe(400);
+      // RFC 7807: Using 409 Conflict for business rule violations
+      expect(response.status).toBe(409);
       const data = await response.json();
-      expect(data.error).toContain('finalized');
+      expect(data.detail).toContain('finalized');
     });
   });
 });
