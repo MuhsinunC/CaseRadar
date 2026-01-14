@@ -5,6 +5,7 @@
 
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import {
   TrendingUp,
@@ -22,14 +25,30 @@ import {
   Minus,
   FileText,
   AlertTriangle,
-  Skull,
+  Flame,
   Car,
   Calendar,
   Wrench,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type TrendDirection = 'INCREASING' | 'DECREASING' | 'STABLE';
+
+interface Complaint {
+  id: string;
+  description: string;
+  make: string;
+  model: string;
+  year: number;
+  component?: string;
+  crash?: boolean;
+  fire?: boolean;
+  injuries?: number;
+  deaths?: number;
+}
 
 interface Pattern {
   id: string;
@@ -48,6 +67,7 @@ interface Pattern {
   crashCount: number;
   createdAt: Date;
   updatedAt: Date;
+  complaints?: Complaint[];
 }
 
 interface PatternDetailDialogProps {
@@ -75,6 +95,32 @@ export function PatternDetailDialog({
   onOpenChange,
   onGenerateComplaint,
 }: PatternDetailDialogProps) {
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [isLoadingComplaints, setIsLoadingComplaints] = useState(false);
+  const [complaintsExpanded, setComplaintsExpanded] = useState(true);
+
+  // Fetch complaints when dialog opens
+  useEffect(() => {
+    if (open && pattern?.id) {
+      setIsLoadingComplaints(true);
+      setComplaints([]);
+
+      fetch(`/api/patterns/${pattern.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.pattern?.complaints) {
+            setComplaints(data.pattern.complaints);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch pattern complaints:', error);
+        })
+        .finally(() => {
+          setIsLoadingComplaints(false);
+        });
+    }
+  }, [open, pattern?.id]);
+
   if (!pattern) return null;
 
   const formatDate = (date: Date) => {
@@ -174,6 +220,92 @@ export function PatternDetailDialog({
             <div className="bg-muted/50 rounded-lg p-4">
               <p className="text-sm leading-relaxed">{pattern.description}</p>
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Linked Complaints Section */}
+          <div>
+            <button
+              onClick={() => setComplaintsExpanded(!complaintsExpanded)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">
+                  Linked Complaints ({isLoadingComplaints ? '...' : complaints.length})
+                </span>
+              </div>
+              {complaintsExpanded ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+
+            {complaintsExpanded && (
+              <div className="mt-3">
+                {isLoadingComplaints ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full" />
+                    ))}
+                  </div>
+                ) : complaints.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No complaints linked to this pattern yet.</p>
+                    <p className="text-xs mt-1">
+                      Run pattern detection to link complaints.
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-64">
+                    <div className="space-y-2 pr-4">
+                      {complaints.map((complaint) => (
+                        <div
+                          key={complaint.id}
+                          className="p-3 border rounded-lg bg-background hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Car className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium text-sm">
+                                {complaint.year} {complaint.make} {complaint.model}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {complaint.crash && (
+                                <Badge variant="destructive" className="text-xs">Crash</Badge>
+                              )}
+                              {complaint.fire && (
+                                <Badge variant="destructive" className="text-xs">
+                                  <Flame className="h-3 w-3 mr-1" />
+                                  Fire
+                                </Badge>
+                              )}
+                              {(complaint.injuries ?? 0) > 0 && (
+                                <Badge variant="outline" className="text-xs text-warning border-warning">
+                                  {complaint.injuries} injured
+                                </Badge>
+                              )}
+                              {(complaint.deaths ?? 0) > 0 && (
+                                <Badge variant="destructive" className="text-xs">
+                                  {complaint.deaths} death{(complaint.deaths ?? 0) > 1 ? 's' : ''}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {complaint.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Dates */}

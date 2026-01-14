@@ -175,6 +175,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             make: true,
             model: true,
             year: true,
+            component: true,
+            crash: true,
+            fire: true,
+            injuries: true,
+            deaths: true,
           },
           take: 100,
         },
@@ -185,8 +190,40 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return Problems.notFound('pattern', `Pattern ${id} not found`);
     }
 
-    // Tenant isolation check
-    if (pattern.organizationId !== user.organizationId) {
+    // If pattern has no linked complaints, find matching ones dynamically
+    if (pattern.complaints.length === 0) {
+      const matchingComplaints = await prisma.complaint.findMany({
+        where: {
+          make: { equals: pattern.make, mode: 'insensitive' },
+          model: { equals: pattern.model, mode: 'insensitive' },
+          component: { contains: pattern.component, mode: 'insensitive' },
+          year: {
+            gte: pattern.yearStart,
+            lte: pattern.yearEnd,
+          },
+        },
+        select: {
+          id: true,
+          description: true,
+          make: true,
+          model: true,
+          year: true,
+          component: true,
+          crash: true,
+          fire: true,
+          injuries: true,
+          deaths: true,
+        },
+        take: 100,
+        orderBy: { dateAdded: 'desc' },
+      });
+
+      // Add matching complaints to pattern object
+      (pattern as typeof pattern & { complaints: typeof matchingComplaints }).complaints = matchingComplaints;
+    }
+
+    // Tenant isolation check - allow global patterns (organizationId = null) and org-specific patterns
+    if (pattern.organizationId !== null && pattern.organizationId !== user.organizationId) {
       return Problems.forbidden('You do not have access to this pattern');
     }
 
