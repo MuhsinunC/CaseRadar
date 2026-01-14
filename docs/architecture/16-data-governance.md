@@ -532,4 +532,5 @@ flowchart TD
 ---
 
 **Previous:** [15-threat-model.md](./15-threat-model.md) - Threat Model
+**Next:** [17-business-continuity.md](./17-business-continuity.md) - Business Continuity Plan
 **Index:** [00-overview.md](./00-overview.md) - System Overview
