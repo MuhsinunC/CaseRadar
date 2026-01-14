@@ -162,6 +162,10 @@ model GeneratedComplaint {
   contentHash String?         // SHA-256 hash for integrity verification
   legalHold   Boolean         @default(false) // If true, cannot be deleted
 
+  // AI Version tracking for audit trail
+  aiVersionId String?
+  aiVersion   AIVersion? @relation(fields: [aiVersionId], references: [id])
+
   // GDPR soft-delete support
   deletedAt DateTime?
 
@@ -175,6 +179,28 @@ model GeneratedComplaint {
   @@index([createdAt])
   @@index([legalHold])
   @@index([deletedAt])
+  @@index([aiVersionId])
+}
+
+// ============================================
+// AI Version Tracking
+// ============================================
+
+model AIVersion {
+  id             String   @id @default(cuid())
+  modelProvider  String   // 'openai' | 'anthropic'
+  modelVersion   String   // e.g., 'claude-3-opus-20240229'
+  promptVersion  String   // e.g., 'v2.1.0'
+  promptHash     String   // SHA-256 of prompt template
+  embeddingModel String   // e.g., 'text-embedding-3-small'
+  parameters     Json?    // temperature, max_tokens, etc.
+  createdAt      DateTime @default(now())
+
+  generations GeneratedComplaint[]
+
+  @@index([modelVersion])
+  @@index([promptVersion])
+  @@index([promptHash])
 }
 
 // ============================================
