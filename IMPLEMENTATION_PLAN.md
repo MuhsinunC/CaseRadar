@@ -5578,7 +5578,7 @@ describe('Cache-Aside Pattern', () => {
 
 ---
 
-## P3-6: Per-Service Timeout Configurations
+## P3-6: Per-Service Timeout Configurations - IMPLEMENTED
 
 **Document Reference:** 12-reliability-scalability.md
 **Why Low:** Fine-grained control over external service calls
@@ -5666,11 +5666,11 @@ describe('Service Timeouts', () => {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] Timeout configuration per service
-- [ ] withTimeout wrapper function
-- [ ] Reasonable default values
-- [ ] All tests pass
+- [x] Test file created
+- [x] Timeout configuration per service
+- [x] withTimeout wrapper function
+- [x] Reasonable default values
+- [x] All tests pass (28 tests)
 
 ---
 
