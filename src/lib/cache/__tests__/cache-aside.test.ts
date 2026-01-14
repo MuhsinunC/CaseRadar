@@ -258,7 +258,7 @@ describe('Cache-Aside Pattern', () => {
       ]);
 
       // All should get the same result from the single fetch
-      expect(results.every((r) => r.call === results[0].call)).toBe(true);
+      expect(results.every((r) => (r as { call: number }).call === (results[0] as { call: number }).call)).toBe(true);
     });
   });
 });

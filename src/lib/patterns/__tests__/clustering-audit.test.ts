@@ -286,7 +286,8 @@ describe('Clustering Audit', () => {
 
       const result = await replayClusteringRun('run_1');
 
-      expect(result.canReplay).toBe(true);
+      expect(result).not.toBeNull();
+      expect(result!.canReplay).toBe(true);
     });
 
     it('should return null if run not found', async () => {

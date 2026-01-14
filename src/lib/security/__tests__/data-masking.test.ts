@@ -5,7 +5,7 @@
  * Tests for PII masking in text and sensitive field masking in objects.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   maskPII,
   maskSensitiveFields,

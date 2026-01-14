@@ -159,30 +159,34 @@ describe('Feature Flags - Server Side', () => {
 
     it('should include rollout percentage for experiment flags', () => {
       const config = getFeatureConfig('GRADUAL_ROLLOUT');
+      expect(config).toBeDefined();
 
-      expect(config.type).toBe('experiment');
-      expect(config.rolloutPercentage).toBeDefined();
+      expect(config!.type).toBe('experiment');
+      expect(config!.rolloutPercentage).toBeDefined();
     });
 
     it('should include required plans for plan-gated flags', () => {
       const config = getFeatureConfig('ADVANCED_EXPORT');
+      expect(config).toBeDefined();
 
-      expect(config.requiredPlan).toBeDefined();
-      expect(config.requiredPlan).toContain('PRO');
+      expect(config!.requiredPlan).toBeDefined();
+      expect(config!.requiredPlan).toContain('PRO');
     });
 
     it('should include required roles for permission flags', () => {
       const config = getFeatureConfig('ADMIN_ANALYTICS');
+      expect(config).toBeDefined();
 
-      expect(config.requiredRole).toBeDefined();
-      expect(config.requiredRole).toContain('ADMIN');
+      expect(config!.requiredRole).toBeDefined();
+      expect(config!.requiredRole).toContain('ADMIN');
     });
 
     it('should include env override for ops flags', () => {
       const config = getFeatureConfig('DEBUG_MODE');
+      expect(config).toBeDefined();
 
-      expect(config.type).toBe('ops');
-      expect(config.envOverride).toBeDefined();
+      expect(config!.type).toBe('ops');
+      expect(config!.envOverride).toBeDefined();
     });
 
     it('should return undefined for unknown flags', () => {
@@ -250,7 +254,7 @@ describe('Feature Flag Types', () => {
     flags.forEach((flag) => {
       const config = getFeatureConfig(flag);
       expect(config).toBeDefined();
-      expect(config.name).toBe(flag);
+      expect(config!.name).toBe(flag);
     });
   });
 
@@ -266,7 +270,8 @@ describe('Feature Flag Types', () => {
     ];
 
     configs.forEach((config) => {
-      expect(validTypes).toContain(config.type);
+      expect(config).toBeDefined();
+      expect(validTypes).toContain(config!.type);
     });
   });
 
@@ -282,8 +287,9 @@ describe('Feature Flag Types', () => {
 
     flags.forEach((flag) => {
       const config = getFeatureConfig(flag);
-      expect(config.description).toBeTruthy();
-      expect(config.description.length).toBeGreaterThan(0);
+      expect(config).toBeDefined();
+      expect(config!.description).toBeTruthy();
+      expect(config!.description.length).toBeGreaterThan(0);
     });
   });
 });
@@ -306,8 +312,9 @@ describe('Feature Flag Configuration Integrity', () => {
 
   it('experiment flags should have rollout percentage between 0-100', () => {
     const config = getFeatureConfig('GRADUAL_ROLLOUT');
+    expect(config).toBeDefined();
 
-    if (config.type === 'experiment' && config.rolloutPercentage !== undefined) {
+    if (config && config.type === 'experiment' && config.rolloutPercentage !== undefined) {
       expect(config.rolloutPercentage).toBeGreaterThanOrEqual(0);
       expect(config.rolloutPercentage).toBeLessThanOrEqual(100);
     }
@@ -315,16 +322,18 @@ describe('Feature Flag Configuration Integrity', () => {
 
   it('permission flags should have at least one required role', () => {
     const config = getFeatureConfig('ADMIN_ANALYTICS');
+    expect(config).toBeDefined();
 
-    expect(config.type).toBe('permission');
-    expect(config.requiredRole).toBeDefined();
-    expect(config.requiredRole!.length).toBeGreaterThan(0);
+    expect(config!.type).toBe('permission');
+    expect(config!.requiredRole).toBeDefined();
+    expect(config!.requiredRole!.length).toBeGreaterThan(0);
   });
 
   it('plan-gated flags should have at least one required plan', () => {
     const config = getFeatureConfig('ADVANCED_EXPORT');
+    expect(config).toBeDefined();
 
-    expect(config.requiredPlan).toBeDefined();
-    expect(config.requiredPlan!.length).toBeGreaterThan(0);
+    expect(config!.requiredPlan).toBeDefined();
+    expect(config!.requiredPlan!.length).toBeGreaterThan(0);
   });
 });

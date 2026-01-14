@@ -450,7 +450,7 @@ describe('Subscription Webhooks', () => {
     it('should handle unknown event types gracefully', async () => {
       const event: StripeWebhookEvent = {
         type: 'unknown.event.type' as any,
-        data: { object: {} },
+        data: { object: { id: 'unknown_obj_1' } },
       };
 
       // Should not throw

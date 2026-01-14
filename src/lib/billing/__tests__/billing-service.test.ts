@@ -283,8 +283,9 @@ describe('Billing Service', () => {
 
       const result = await getSubscription('org_1');
 
-      expect(result.status).toBe('active');
-      expect(result.currentPeriodEnd).toBeDefined();
+      expect(result).not.toBeNull();
+      expect(result!.status).toBe('active');
+      expect(result!.currentPeriodEnd).toBeDefined();
     });
 
     it('should return null for organization without subscription', async () => {

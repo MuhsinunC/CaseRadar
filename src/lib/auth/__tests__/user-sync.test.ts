@@ -457,9 +457,17 @@ describe('Role Mapping', () => {
       plan: 'FREE',
     } as any);
 
-    vi.mocked(prisma.user.upsert).mockImplementation(async (args) => {
-      return args.create as any;
-    });
+    vi.mocked(prisma.user.upsert).mockResolvedValue({
+      id: 'new_admin_id',
+      clerkUserId: 'user_123',
+      email: 'test@example.com',
+      role: 'ADMIN',
+      organizationId: 'internal_org_1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      isDeleted: false,
+    } as any);
 
     const event: ClerkWebhookEvent = {
       type: 'organizationMembership.created',
@@ -494,9 +502,17 @@ describe('Role Mapping', () => {
       plan: 'FREE',
     } as any);
 
-    vi.mocked(prisma.user.upsert).mockImplementation(async (args) => {
-      return args.create as any;
-    });
+    vi.mocked(prisma.user.upsert).mockResolvedValue({
+      id: 'new_user_id',
+      clerkUserId: 'user_123',
+      email: 'test@example.com',
+      role: 'VIEWER',
+      organizationId: 'internal_org_1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      isDeleted: false,
+    } as any);
 
     const event: ClerkWebhookEvent = {
       type: 'organizationMembership.created',
