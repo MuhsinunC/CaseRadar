@@ -31,6 +31,7 @@ model Organization {
   subscription        Subscription?
   auditLogs           AuditLog[]
   legalHolds          LegalHold[]
+  clusteringRuns      ClusteringRun[]
 
   @@index([clerkOrgId])
 }
@@ -126,6 +127,10 @@ model Pattern {
   complaints          Complaint[]
   generatedComplaints GeneratedComplaint[]
 
+  // Clustering audit trail
+  clusteringRunId String?
+  clusteringRun   ClusteringRun? @relation(fields: [clusteringRunId], references: [id])
+
   // Tenant visibility (null = global, otherwise org-specific)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
@@ -138,6 +143,34 @@ model Pattern {
   @@index([make, model])
   @@index([component])
   @@index([organizationId])
+  @@index([clusteringRunId])
+}
+
+// ============================================
+// Clustering Run Audit Trail
+// ============================================
+
+model ClusteringRun {
+  id                  String   @id @default(cuid())
+  algorithmVersion    String   // Version of clustering algorithm
+  randomSeed          Int      // Seed for reproducibility
+  minClusterSize      Int      // Minimum cluster size parameter
+  similarityThreshold Float    // Threshold for similarity
+  inputComplaintCount Int      // Number of input complaints
+  inputComplaintIds   String[] // IDs for replay capability
+  outputPatternCount  Int      // Number of patterns created
+  outputPatternIds    String[] // IDs of created patterns
+  durationMs          Int      // How long the run took
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  createdBy           String   // Clerk user ID
+  createdAt           DateTime @default(now())
+
+  patterns Pattern[]
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@index([algorithmVersion])
 }
 
 // ============================================

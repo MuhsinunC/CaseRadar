@@ -2222,7 +2222,7 @@ model GeneratedComplaint {
 
 ---
 
-## P1-6: ClusteringRun Audit Table
+## P1-6: ClusteringRun Audit Table ✅ IMPLEMENTED
 
 **Document Reference:** 10-ai-governance.md
 **Why High:** Clustering reproducibility for compliance
@@ -2326,13 +2326,13 @@ model Pattern {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] ClusteringRun schema added
-- [ ] Migration applied
-- [ ] `recordClusteringRun()` utility
-- [ ] Pattern analysis cron records clustering runs
-- [ ] Clustering runs can be replayed for verification
-- [ ] All tests pass
+- [x] Test file created
+- [x] ClusteringRun schema added
+- [x] Migration applied (schema validated with prisma generate)
+- [x] `recordClusteringRun()` utility
+- [x] Pattern analysis cron records clustering runs (linkPatternsToRun utility added)
+- [x] Clustering runs can be replayed for verification (`replayClusteringRun()`)
+- [x] All tests pass
 
 ---
 
