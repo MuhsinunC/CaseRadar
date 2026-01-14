@@ -12,7 +12,6 @@ import {
   recordFailedAttempt,
   clearFailedAttempts,
   getFailedAttempts,
-  AuthRateLimitResult,
   clearAllAuthLimits,
 } from '../auth-rate-limit';
 

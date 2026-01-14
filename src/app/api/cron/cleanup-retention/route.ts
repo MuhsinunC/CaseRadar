@@ -82,7 +82,9 @@ async function getHeldResourceIds(): Promise<Set<string>> {
     });
 
     scopes.forEach((scope) => {
-      heldIds.add(scope.resourceId);
+      if (scope.resourceId) {
+        heldIds.add(scope.resourceId);
+      }
     });
   } catch (error) {
     console.error('Error fetching legal hold scopes:', error);

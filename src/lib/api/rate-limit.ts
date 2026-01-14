@@ -6,7 +6,7 @@
  * For production scale, replace with Vercel KV or Upstash Redis.
  */
 
-interface RateLimitConfig {
+interface InternalRateLimitConfig {
   maxRequests: number; // Maximum requests allowed
   windowMs: number; // Time window in milliseconds
 }
@@ -42,7 +42,7 @@ function cleanupOldEntries() {
  */
 export function checkRateLimit(
   identifier: string,
-  config: RateLimitConfig
+  config: InternalRateLimitConfig
 ): {
   allowed: boolean;
   remaining: number;
@@ -278,7 +278,10 @@ export function withRateLimit<T extends (...args: any[]) => Promise<Response>>(
 ): T {
   return (async (...args: Parameters<T>) => {
     const identifier = getIdentifier(...args);
-    const result = checkRateLimit(identifier, config);
+    const result = checkRateLimit(identifier, {
+      maxRequests: config.requests,
+      windowMs: config.windowMs,
+    });
 
     if (!result.allowed) {
       return new Response(

@@ -15,8 +15,8 @@ const isPublicRoute = createRouteMatcher([
   '/api/health',
 ]);
 
-// Define routes that require organization selection
-const isOrgRoute = createRouteMatcher([
+// Define routes that require organization selection (reserved for future use)
+const _isOrgRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/complaints(.*)',
   '/patterns(.*)',

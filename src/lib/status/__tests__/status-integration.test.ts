@@ -13,8 +13,6 @@ import {
   getComponentStatuses,
   resolveIncident,
   getActiveIncidents,
-  IncidentStatus,
-  ComponentStatus,
   COMPONENTS,
   clearStatusStore,
   runHealthCheckWithStatusUpdate,
@@ -52,7 +50,7 @@ describe('Status Page Integration', () => {
     });
 
     it('should have all required component fields', () => {
-      for (const [key, component] of Object.entries(COMPONENTS)) {
+      for (const [, component] of Object.entries(COMPONENTS)) {
         expect(component.name).toBeDefined();
         expect(component.description).toBeDefined();
       }

@@ -53,7 +53,7 @@ export function anyRoleRequiresMFA(roles: string[]): boolean {
  */
 export async function checkMFAStatus(userId: string): Promise<MFAStatus> {
   try {
-    const client = clerkClient();
+    const client = await clerkClient();
     const user = await client.users.getUser(userId);
 
     return {

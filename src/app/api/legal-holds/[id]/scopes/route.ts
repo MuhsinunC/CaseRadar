@@ -138,7 +138,7 @@ export async function POST(
           resourceId: id,
           metadata: {
             scopesAdded: result.count,
-            scopes: body.scopes,
+            scopes: JSON.parse(JSON.stringify(body.scopes)),
           },
         },
       });

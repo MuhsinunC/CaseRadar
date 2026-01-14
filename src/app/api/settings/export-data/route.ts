@@ -117,12 +117,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           createdAt: true,
         },
       }),
-      // User's generated complaints
+      // User's generated complaints (through organization)
       prisma.generatedComplaint.findMany({
-        where: { userId: user.id },
+        where: { organizationId: user.organizationId },
         select: {
           id: true,
-          type: true,
           status: true,
           content: true,
           createdAt: true,
@@ -181,7 +180,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         : null,
       generatedComplaints: complaints.map((c) => ({
         id: c.id,
-        type: c.type,
         status: c.status,
         content: c.content,
         createdAt: c.createdAt.toISOString(),

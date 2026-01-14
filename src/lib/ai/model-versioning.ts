@@ -134,7 +134,7 @@ export async function getModelVersionInfo(
   query: ModelVersionQuery
 ): Promise<ModelVersionReport[]> {
   // Filter stored versions based on query
-  let filtered = modelVersionStore.filter((v) => {
+  const filtered = modelVersionStore.filter((v) => {
     // Filter by provider
     if (query.provider && v.provider !== query.provider) {
       return false;

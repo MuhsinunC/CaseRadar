@@ -8,6 +8,7 @@
 
 import crypto from 'crypto';
 import { prisma } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 
 /**
  * AI Version data for recording
@@ -122,7 +123,9 @@ export async function recordAIVersion(
       promptVersion: data.promptVersion,
       promptHash: data.promptHash,
       embeddingModel: data.embeddingModel,
-      parameters: data.parameters ?? null,
+      parameters: data.parameters
+        ? (data.parameters as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
     },
   });
 
