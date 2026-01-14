@@ -3326,15 +3326,17 @@ describe('Sign-in Rate Limiting', () => {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] IP-based rate limiting for auth endpoints
-- [ ] 10 requests per minute limit
-- [ ] Failed attempt tracking
-- [ ] IP blocking after 5 consecutive failures
-- [ ] 15-minute block duration
-- [ ] Clear on successful login
-- [ ] Retry-After header
-- [ ] All tests pass
+- [x] Test file created
+- [x] IP-based rate limiting for auth endpoints
+- [x] 10 requests per minute limit
+- [x] Failed attempt tracking
+- [x] IP blocking after 5 consecutive failures
+- [x] 15-minute block duration
+- [x] Clear on successful login
+- [x] Retry-After header
+- [x] All tests pass
+
+**IMPLEMENTED** ✅
 
 ---
 
