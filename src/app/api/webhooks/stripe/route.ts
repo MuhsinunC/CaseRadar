@@ -1,12 +1,17 @@
 /**
  * Stripe Webhook Handler
  * Processes webhooks from Stripe for subscription management
+ *
+ * Security features:
+ * - Signature verification (Stripe)
+ * - Idempotency tracking (prevent replay attacks)
  */
 
 import Stripe from 'stripe';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { processStripeWebhook, type StripeWebhookEvent } from '@/lib/billing';
+import { prisma } from '@/lib/db';
 
 // Lazy Stripe initialization to avoid build-time errors
 let _stripe: Stripe | null = null;
@@ -54,8 +59,20 @@ export async function POST(req: Request) {
     console.error('Error verifying webhook signature:', err);
     return NextResponse.json(
       { error: 'Invalid webhook signature' },
-      { status: 400 }
+      { status: 401 }
     );
+  }
+
+  // Check idempotency - prevent replay attacks
+  // Stripe events have unique IDs
+  const existingWebhook = await prisma.processedWebhook.findUnique({
+    where: { id: event.id },
+  });
+
+  if (existingWebhook) {
+    // Already processed, return success (idempotent)
+    console.log('Webhook already processed:', event.id);
+    return NextResponse.json({ received: true, cached: true });
   }
 
   try {
@@ -68,6 +85,16 @@ export async function POST(req: Request) {
     };
 
     await processStripeWebhook(webhookEvent);
+
+    // Mark webhook as processed (expires in 30 days)
+    await prisma.processedWebhook.create({
+      data: {
+        id: event.id,
+        provider: 'stripe',
+        eventType: event.type,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      },
+    });
 
     return NextResponse.json({ received: true });
   } catch (error) {

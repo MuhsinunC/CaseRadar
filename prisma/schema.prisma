@@ -30,6 +30,7 @@ model Organization {
   generatedComplaints GeneratedComplaint[]
   subscription        Subscription?
   auditLogs           AuditLog[]
+  legalHolds          LegalHold[]
 
   @@index([clerkOrgId])
 }
@@ -151,8 +152,10 @@ model GeneratedComplaint {
   pdfUrl  String? // Supabase Storage URL for generated PDF
 
   // Metadata
-  status  ComplaintStatus @default(DRAFT)
-  version Int             @default(1)
+  status      ComplaintStatus @default(DRAFT)
+  version     Int             @default(1)
+  contentHash String?         // SHA-256 hash for integrity verification
+  legalHold   Boolean         @default(false) // If true, cannot be deleted
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -162,6 +165,7 @@ model GeneratedComplaint {
   @@index([patternId])
   @@index([status])
   @@index([createdAt])
+  @@index([legalHold])
 }
 
 // ============================================
@@ -209,6 +213,60 @@ model AuditLog {
 }
 
 // ============================================
+// Webhook Idempotency (Security)
+// ============================================
+
+model ProcessedWebhook {
+  id          String   @id // Webhook ID from provider (svix-id or stripe event id)
+  provider    String   // 'clerk' or 'stripe'
+  eventType   String   // e.g., 'user.created', 'invoice.paid'
+  processedAt DateTime @default(now())
+  expiresAt   DateTime // Auto-cleanup after 30 days
+
+  @@index([provider, eventType])
+  @@index([expiresAt])
+}
+
+// ============================================
+// Legal Hold (e-Discovery Support)
+// ============================================
+
+model LegalHold {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  matterName     String       // Case reference
+  description    String?      @db.Text
+  issuedAt       DateTime     @default(now())
+  releasedAt     DateTime?
+  issuedBy       String       // User ID who issued the hold
+  releasedBy     String?      // User ID who released the hold
+  status         LegalHoldStatus @default(ACTIVE)
+
+  scopes LegalHoldScope[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model LegalHoldScope {
+  id           String    @id @default(cuid())
+  legalHoldId  String
+  legalHold    LegalHold @relation(fields: [legalHoldId], references: [id], onDelete: Cascade)
+  resourceType String    // 'PATTERN', 'GENERATED', 'USER'
+  resourceId   String?   // null means all resources of type
+  custodianId  String?   // User ID if custodian-specific
+
+  createdAt DateTime @default(now())
+
+  @@index([legalHoldId])
+  @@index([resourceType, resourceId])
+}
+
+// ============================================
 // Enums
 // ============================================
 
@@ -242,4 +300,9 @@ enum TrendDirection {
   INCREASING
   DECREASING
   STABLE
+}
+
+enum LegalHoldStatus {
+  ACTIVE
+  RELEASED
 }
