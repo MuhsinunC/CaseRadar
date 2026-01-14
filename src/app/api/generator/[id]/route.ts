@@ -98,6 +98,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Check for legal hold - documents under legal hold cannot be deleted
+    if (complaint.legalHold) {
+      return NextResponse.json(
+        { error: 'Cannot delete complaints under legal hold. Contact your administrator to release the hold.' },
+        { status: 403 }
+      );
+    }
+
     await prisma.generatedComplaint.delete({
       where: { id },
     });

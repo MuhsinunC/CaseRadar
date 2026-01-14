@@ -34,6 +34,9 @@ vi.mock('@/lib/db', () => ({
     complaint: {
       findMany: vi.fn(),
     },
+    legalHoldScope: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -394,6 +397,9 @@ describe('Patterns API', () => {
         id: 'pattern_1',
         organizationId: 'org_123',
       } as any);
+
+      // Mock no legal hold on the pattern
+      vi.mocked(prisma.legalHoldScope.findFirst).mockResolvedValue(null);
 
       vi.mocked(prisma.pattern.delete).mockResolvedValue({} as any);
 

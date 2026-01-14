@@ -9,7 +9,22 @@ import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { checkPlanLimit } from '@/lib/billing';
 import { generateComplaintDocument } from '@/lib/complaint';
+import { generateContentHash } from '@/lib/security/content-hash';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { ComplaintStatus } from '@prisma/client';
+
+/**
+ * Add rate limit headers to a NextResponse
+ */
+function addRateLimitHeaders(
+  response: NextResponse,
+  headers: Record<string, string>
+): NextResponse {
+  Object.entries(headers).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
+  return response;
+}
 
 interface GeneratedWhereClause {
   organizationId: string;
@@ -21,6 +36,25 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limiting - generation is expensive (10 req/min)
+    const rateLimitKey = `generation:${user.organizationId}:${user.id}`;
+    const rateCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.generation);
+    if (!rateCheck.allowed) {
+      return addRateLimitHeaders(
+        NextResponse.json(
+          {
+            type: 'https://api.caseradar.com/errors/rate-limited',
+            title: 'Rate Limit Exceeded',
+            status: 429,
+            detail: `Generation rate limit exceeded. Please wait ${Math.ceil((rateCheck.resetAt - Date.now()) / 1000)} seconds.`,
+            retryAfter: Math.ceil((rateCheck.resetAt - Date.now()) / 1000),
+          },
+          { status: 429 }
+        ),
+        rateCheck.headers
+      );
     }
 
     // Check feature access
@@ -117,11 +151,16 @@ export async function POST(request: NextRequest) {
       defendant: body.defendant || `${pattern.make} Motor Corporation`,
     });
 
+    // Serialize content and compute integrity hash
+    const contentString = JSON.stringify(generatedDoc);
+    const contentHash = generateContentHash(contentString);
+
     // Save to database - plaintiffInfo and court are stored in content JSON
     const complaint = await prisma.generatedComplaint.create({
       data: {
         title: generatedDoc.title,
-        content: JSON.stringify(generatedDoc),
+        content: contentString,
+        contentHash, // SHA-256 hash for document integrity verification
         status: 'DRAFT',
         patternId: pattern.id,
         organizationId: user.organizationId,
@@ -129,7 +168,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ complaint }, { status: 201 });
+    return addRateLimitHeaders(
+      NextResponse.json({ complaint }, { status: 201 }),
+      rateCheck.headers
+    );
   } catch (error) {
     console.error('Error generating complaint:', error);
     return NextResponse.json(

@@ -6,6 +6,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
+
+/**
+ * Add rate limit headers to a NextResponse
+ */
+function addRateLimitHeaders(
+  response: NextResponse,
+  headers: Record<string, string>
+): NextResponse {
+  Object.entries(headers).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
+  return response;
+}
 
 interface WhereClause {
   make?: { contains: string; mode: 'insensitive' };
@@ -23,6 +37,27 @@ export async function GET(request: NextRequest) {
   try {
     // Get current user (for future org-specific filtering if needed)
     const user = await getCurrentUser();
+
+    // Rate limiting - search is expensive (60 req/min)
+    // Use IP address if user not authenticated, otherwise use user ID
+    const clientIP = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+    const rateLimitKey = `search:${user?.id || clientIP}`;
+    const rateCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.search);
+    if (!rateCheck.allowed) {
+      return addRateLimitHeaders(
+        NextResponse.json(
+          {
+            type: 'https://api.caseradar.com/errors/rate-limited',
+            title: 'Rate Limit Exceeded',
+            status: 429,
+            detail: `Search rate limit exceeded. Please wait ${Math.ceil((rateCheck.resetAt - Date.now()) / 1000)} seconds.`,
+            retryAfter: Math.ceil((rateCheck.resetAt - Date.now()) / 1000),
+          },
+          { status: 429 }
+        ),
+        rateCheck.headers
+      );
+    }
 
     const searchParams = request.nextUrl.searchParams;
 
@@ -166,17 +201,20 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({
-      complaints,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-      searchType,
-      ...(stats && { stats }),
-    });
+    return addRateLimitHeaders(
+      NextResponse.json({
+        complaints,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+        searchType,
+        ...(stats && { stats }),
+      }),
+      rateCheck.headers
+    );
   } catch (error) {
     console.error('Error fetching complaints:', error);
     return NextResponse.json(

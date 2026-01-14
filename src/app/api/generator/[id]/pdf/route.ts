@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { generatePDF } from '@/lib/pdf';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 
 interface RouteParams {
   params: Promise<{
@@ -19,6 +20,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const user = await getCurrentUser();
     if (!user?.organizationId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Rate limiting - PDF generation is CPU intensive (20 req/min)
+    const rateLimitKey = `pdf:${user.organizationId}:${user.id}`;
+    const rateCheck = checkRateLimit(rateLimitKey, RATE_LIMITS.pdf);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        {
+          type: 'https://api.caseradar.com/errors/rate-limited',
+          title: 'Rate Limit Exceeded',
+          status: 429,
+          detail: `PDF export rate limit exceeded. Please wait ${Math.ceil((rateCheck.resetAt - Date.now()) / 1000)} seconds.`,
+          retryAfter: Math.ceil((rateCheck.resetAt - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: rateCheck.headers,
+        }
+      );
     }
 
     const { id } = await params;

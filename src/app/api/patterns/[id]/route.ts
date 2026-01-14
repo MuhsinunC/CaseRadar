@@ -304,6 +304,25 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Check for legal hold - patterns under legal hold cannot be deleted
+    const legalHold = await prisma.legalHoldScope.findFirst({
+      where: {
+        resourceType: 'PATTERN',
+        resourceId: id,
+        legalHold: {
+          status: 'ACTIVE',
+          organizationId: user.organizationId,
+        },
+      },
+    });
+
+    if (legalHold) {
+      return NextResponse.json(
+        { error: 'Cannot delete patterns under legal hold. Contact your administrator to release the hold.' },
+        { status: 403 }
+      );
+    }
+
     await prisma.pattern.delete({
       where: { id },
     });
