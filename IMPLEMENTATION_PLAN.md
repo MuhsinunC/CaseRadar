@@ -1754,7 +1754,7 @@ export async function GET(request: NextRequest) {
 
 ---
 
-## P1-3: Data Retention Scheduler
+## P1-3: Data Retention Scheduler - IMPLEMENTED
 
 **Document Reference:** 16-data-governance.md
 **Endpoint:** `GET /api/cron/cleanup-retention`
@@ -1967,18 +1967,18 @@ describe('GET /api/cron/cleanup-retention', () => {
 
 ### Acceptance Criteria
 
-- [ ] Test file created and all tests initially fail
-- [ ] Route file created at `src/app/api/cron/cleanup-retention/route.ts`
-- [ ] Cron authentication with CRON_SECRET
-- [ ] Hard delete soft-deleted records after 30 days
-- [ ] Archive audit logs after 7 years
-- [ ] Delete old processed webhooks after 90 days
-- [ ] Skip records under legal hold
-- [ ] Return cleanup statistics
-- [ ] Create audit log for job execution
-- [ ] Handle individual record errors gracefully
-- [ ] Vercel cron configured
-- [ ] All tests pass
+- [x] Test file created and all tests initially fail
+- [x] Route file created at `src/app/api/cron/cleanup-retention/route.ts`
+- [x] Cron authentication with CRON_SECRET
+- [x] Hard delete soft-deleted records after 30 days
+- [ ] Archive audit logs after 7 years (requires schema change - deferred)
+- [x] Delete old processed webhooks after 90 days
+- [x] Skip records under legal hold
+- [x] Return cleanup statistics
+- [x] Create audit log for job execution
+- [x] Handle individual record errors gracefully
+- [x] Vercel cron configured (0 3 * * * - daily at 3 AM UTC)
+- [x] All tests pass (16 tests)
 
 ### Dependencies
 
