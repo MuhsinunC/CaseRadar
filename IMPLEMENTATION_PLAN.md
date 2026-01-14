@@ -2677,12 +2677,14 @@ describe('Per-Endpoint Rate Limiting', () => {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] Endpoint-specific limits configured
-- [ ] Auth endpoints use IP-based limiting
-- [ ] Rate limit headers returned
-- [ ] Window-based reset works
-- [ ] All tests pass
+- [x] Test file created
+- [x] Endpoint-specific limits configured
+- [x] Auth endpoints use IP-based limiting
+- [x] Rate limit headers returned
+- [x] Window-based reset works
+- [x] All tests pass
+
+**IMPLEMENTED** ✅
 
 ---
 

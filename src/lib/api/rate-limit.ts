@@ -130,9 +130,9 @@ export const RATE_LIMITS = {
     maxRequests: 20,
     windowMs: 60 * 1000,
   },
-  // Webhooks: 1000 requests per minute
+  // Webhooks: 100 requests per minute (adjusted for P1-8)
   webhook: {
-    maxRequests: 1000,
+    maxRequests: 100,
     windowMs: 60 * 1000,
   },
   // Auth attempts: 10 per minute (prevent brute force)
@@ -141,6 +141,132 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000,
   },
 } as const;
+
+/**
+ * P1-8: Endpoint-specific rate limit configuration
+ */
+export interface RateLimitConfig {
+  requests: number;
+  windowMs: number;
+  keyType?: 'user' | 'ip';
+}
+
+/**
+ * P1-8: Result of rate limit check
+ */
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+  keyType?: 'user' | 'ip';
+  headers: Record<string, string>;
+}
+
+/**
+ * Endpoint patterns and their rate limits
+ */
+const ENDPOINT_LIMITS: Array<{
+  pattern: RegExp;
+  config: RateLimitConfig;
+}> = [
+  // Generator - expensive AI operations
+  {
+    pattern: /^\/api\/generator/,
+    config: { requests: 10, windowMs: 60000, keyType: 'user' },
+  },
+  // Auth endpoints - IP-based for brute force protection
+  {
+    pattern: /^\/api\/auth\//,
+    config: { requests: 10, windowMs: 60000, keyType: 'ip' },
+  },
+  // Webhook endpoints - IP-based
+  {
+    pattern: /^\/api\/webhooks\//,
+    config: { requests: 100, windowMs: 60000, keyType: 'ip' },
+  },
+  // Complaints search
+  {
+    pattern: /^\/api\/complaints/,
+    config: { requests: 60, windowMs: 60000, keyType: 'user' },
+  },
+  // Patterns
+  {
+    pattern: /^\/api\/patterns/,
+    config: { requests: 60, windowMs: 60000, keyType: 'user' },
+  },
+];
+
+// Default limit for unmatched endpoints
+const DEFAULT_LIMIT: RateLimitConfig = {
+  requests: 100,
+  windowMs: 60000,
+  keyType: 'user',
+};
+
+/**
+ * P1-8: Get rate limit configuration for a specific endpoint
+ */
+export function getEndpointLimit(path: string): RateLimitConfig {
+  for (const { pattern, config } of ENDPOINT_LIMITS) {
+    if (pattern.test(path)) {
+      return config;
+    }
+  }
+  return DEFAULT_LIMIT;
+}
+
+/**
+ * P1-8: Generate rate limit key based on endpoint and identity
+ */
+export function getRateLimitKey(
+  path: string,
+  userId?: string,
+  ipAddress?: string
+): string {
+  const config = getEndpointLimit(path);
+
+  // Use IP for auth and webhook endpoints
+  if (config.keyType === 'ip' || !userId) {
+    return `ip:${ipAddress || 'unknown'}:${path}`;
+  }
+
+  return `user:${userId}:${path}`;
+}
+
+/**
+ * P1-8: Check rate limit with unified interface
+ */
+export async function checkRateLimitAsync(params: {
+  key: string;
+  limit: number;
+  windowMs: number;
+}): Promise<RateLimitResult> {
+  const { key, limit, windowMs } = params;
+
+  // Handle zero limit
+  if (limit <= 0) {
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + windowMs,
+      headers: getRateLimitHeaders(0, Date.now() + windowMs, 0),
+    };
+  }
+
+  const result = checkRateLimit(key, { maxRequests: limit, windowMs });
+
+  // Extract keyType from key
+  const keyType = key.startsWith('ip:') ? 'ip' : 'user';
+
+  return {
+    allowed: result.allowed,
+    remaining: result.remaining,
+    resetAt: result.resetAt,
+    keyType,
+    headers: result.headers,
+  };
+}
+
 
 /**
  * Higher-order function to wrap a route handler with rate limiting
