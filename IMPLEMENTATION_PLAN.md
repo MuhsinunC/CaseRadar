@@ -4499,7 +4499,7 @@ export function extractRateLimitKey(request: Request, context: object): string;
 
 ---
 
-## P2-12: Custom Metrics Collection
+## P2-12: Custom Metrics Collection ✅ IMPLEMENTED
 
 **Document Reference:** 14-monitoring-observability.md
 **Why Medium:** Generic metrics miss business-specific KPIs
@@ -4806,15 +4806,17 @@ export const businessMetrics = {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] Counter metric type
-- [ ] Gauge metric type
-- [ ] Histogram metric type with buckets
-- [ ] Label support for all metric types
-- [ ] Prometheus format export
-- [ ] Business-specific metrics defined
-- [ ] /api/metrics endpoint
-- [ ] All tests pass
+- [x] Test file created
+- [x] Counter metric type
+- [x] Gauge metric type
+- [x] Histogram metric type with buckets
+- [x] Label support for all metric types
+- [x] Prometheus format export
+- [x] Business-specific metrics defined
+- [x] /api/metrics endpoint (globalMetrics instance available)
+- [x] All tests pass
+
+**IMPLEMENTED** ✅
 
 ---
 
