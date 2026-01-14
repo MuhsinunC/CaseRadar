@@ -312,8 +312,10 @@ enum TrendDirection {
 }
 
 enum LegalHoldStatus {
-  ACTIVE
-  RELEASED
+  ISSUED    // Initial state when hold is created
+  ACTIVE    // Hold is actively enforced
+  SUSPENDED // Temporarily suspended
+  RELEASED  // Hold has been released
 }
 
 // ============================================
