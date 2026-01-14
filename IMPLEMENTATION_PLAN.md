@@ -1986,7 +1986,7 @@ describe('GET /api/cron/cleanup-retention', () => {
 
 ---
 
-## P1-4: Webhook Cleanup Cron
+## P1-4: Webhook Cleanup Cron ✅ IMPLEMENTED
 
 **Document Reference:** 08-deployment.md
 **Endpoint:** `GET /api/cron/cleanup-webhooks`
@@ -2072,13 +2072,13 @@ describe('GET /api/cron/cleanup-webhooks', () => {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] Route file created
-- [ ] Deletes webhooks older than 7 days
-- [ ] Uses batch deletion for performance
-- [ ] Returns deletion statistics
-- [ ] Vercel cron configured
-- [ ] All tests pass
+- [x] Test file created
+- [x] Route file created
+- [x] Deletes webhooks older than 7 days
+- [x] Uses batch deletion for performance
+- [x] Returns deletion statistics
+- [x] Vercel cron configured
+- [x] All tests pass
 
 ---
 
