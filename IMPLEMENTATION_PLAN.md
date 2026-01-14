@@ -3196,12 +3196,14 @@ describe('MFA Enforcement', () => {
 
 ### Acceptance Criteria
 
-- [ ] Test file created
-- [ ] MFA check utility
-- [ ] Role-based MFA requirement
-- [ ] Middleware for enforcing MFA
-- [ ] Clear error message for missing MFA
-- [ ] All tests pass
+- [x] Test file created
+- [x] MFA check utility
+- [x] Role-based MFA requirement
+- [x] Middleware for enforcing MFA
+- [x] Clear error message for missing MFA
+- [x] All tests pass
+
+**IMPLEMENTED** ✅
 
 ---
 
