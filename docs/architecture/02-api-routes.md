@@ -1173,5 +1173,213 @@ Rate limiting is enforced per-organization based on subscription plan:
 
 ---
 
+## API Versioning Strategy
+
+### Versioning Approach
+
+CaseRadar uses **URL path versioning** for API stability:
+
+```mermaid
+graph LR
+    subgraph Current["Current (Unversioned)"]
+        V0["/api/complaints"]
+        V0a["/api/patterns"]
+    end
+
+    subgraph Future["Future (Versioned)"]
+        V1["/api/v1/complaints"]
+        V1a["/api/v1/patterns"]
+        V2["/api/v2/complaints"]
+    end
+
+    Current -->|"Migration"| Future
+```
+
+### Version Lifecycle
+
+| Phase | Duration | Support Level |
+|-------|----------|---------------|
+| **Current** | Active development | Full support |
+| **Deprecated** | 6 months notice | Security fixes only |
+| **Sunset** | End of life | No support |
+
+### Deprecation Policy
+
+```mermaid
+sequenceDiagram
+    participant API as API Endpoint
+    participant Client as API Client
+    participant Docs as Documentation
+
+    Note over API,Docs: Deprecation Announced
+    API->>Client: Add Deprecation header
+    API->>Docs: Update docs with sunset date
+
+    Note over API,Docs: Deprecation Period (6 months)
+    Client->>API: Request to deprecated endpoint
+    API-->>Client: Response + Warning header
+
+    Note over API,Docs: Sunset
+    Client->>API: Request to sunset endpoint
+    API-->>Client: 410 Gone
+```
+
+### Deprecation Headers
+
+```http
+HTTP/1.1 200 OK
+Deprecation: true
+Sunset: Sat, 01 Jun 2025 00:00:00 GMT
+Link: </api/v2/complaints>; rel="successor-version"
+X-API-Warn: This endpoint is deprecated. Migrate to /api/v2/complaints by 2025-06-01.
+```
+
+### Breaking vs Non-Breaking Changes
+
+| Non-Breaking (Safe) | Breaking (Requires Version) |
+|---------------------|----------------------------|
+| Adding new fields | Removing fields |
+| Adding new endpoints | Changing field types |
+| Adding optional parameters | Renaming fields |
+| Relaxing validation | Adding required parameters |
+| Bug fixes | Changing response structure |
+
+---
+
+## Error Handling Standards
+
+### RFC 7807 Problem Details
+
+All API errors follow RFC 7807 Problem Details format:
+
+```json
+{
+  "type": "https://caseradar.com/errors/validation-error",
+  "title": "Validation Error",
+  "status": 400,
+  "detail": "The 'make' field is required for vehicle search",
+  "instance": "/api/complaints/search",
+  "errors": [
+    {
+      "field": "make",
+      "message": "Required field is missing"
+    }
+  ]
+}
+```
+
+### Error Types
+
+| Type | Status | Description |
+|------|--------|-------------|
+| `validation-error` | 400 | Invalid input data |
+| `authentication-error` | 401 | Missing or invalid auth |
+| `authorization-error` | 403 | Insufficient permissions |
+| `not-found` | 404 | Resource doesn't exist |
+| `rate-limit-exceeded` | 429 | Too many requests |
+| `internal-error` | 500 | Unexpected server error |
+| `service-unavailable` | 503 | Dependency failure |
+
+### Error Response Examples
+
+**Validation Error:**
+```json
+{
+  "type": "https://caseradar.com/errors/validation-error",
+  "title": "Validation Error",
+  "status": 400,
+  "detail": "Request body validation failed",
+  "errors": [
+    { "field": "yearStart", "message": "Must be between 1980 and 2025" },
+    { "field": "make", "message": "Required" }
+  ]
+}
+```
+
+**Rate Limit Error:**
+```json
+{
+  "type": "https://caseradar.com/errors/rate-limit-exceeded",
+  "title": "Rate Limit Exceeded",
+  "status": 429,
+  "detail": "Monthly search limit reached for FREE plan",
+  "retryAfter": 2592000,
+  "limits": {
+    "plan": "FREE",
+    "limit": 50,
+    "used": 50,
+    "resetsAt": "2025-02-01T00:00:00Z"
+  }
+}
+```
+
+---
+
+## Idempotency
+
+### Idempotent Operations
+
+| Method | Idempotent | Safe |
+|--------|------------|------|
+| GET | Yes | Yes |
+| HEAD | Yes | Yes |
+| OPTIONS | Yes | Yes |
+| PUT | Yes | No |
+| DELETE | Yes | No |
+| POST | No | No |
+| PATCH | No | No |
+
+### Idempotency Keys for POST
+
+For non-idempotent operations, clients can provide idempotency keys:
+
+```http
+POST /api/generator/generate
+Idempotency-Key: unique-request-id-12345
+Content-Type: application/json
+
+{ "patternId": "pattern-123" }
+```
+
+**Server Behavior:**
+1. Check if `Idempotency-Key` was seen in last 24 hours
+2. If seen, return cached response
+3. If new, process request and cache response with key
+
+---
+
+## Pagination Standards
+
+### Cursor-Based Pagination
+
+All list endpoints use cursor-based pagination:
+
+```http
+GET /api/complaints?cursor=abc123&limit=50
+```
+
+**Response:**
+```json
+{
+  "data": [...],
+  "pagination": {
+    "hasMore": true,
+    "nextCursor": "def456",
+    "prevCursor": "xyz789",
+    "total": 1250
+  }
+}
+```
+
+### Pagination Parameters
+
+| Parameter | Type | Default | Max |
+|-----------|------|---------|-----|
+| `cursor` | string | null | - |
+| `limit` | number | 20 | 100 |
+| `direction` | "forward" \| "backward" | "forward" | - |
+
+---
+
 **Previous:** [01-database-schema.md](./01-database-schema.md) - Database Schema
 **Next:** [03-frontend-components.md](./03-frontend-components.md) - Frontend Components
