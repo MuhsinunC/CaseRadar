@@ -57,15 +57,24 @@ function formatCount(num: number): string {
   return num.toString();
 }
 
+function formatSeverity(score: number): string {
+  if (score >= 1000) {
+    return `${(score / 1000).toFixed(1)}K`;
+  }
+  return score.toFixed(0);
+}
+
 function getSeverityColor(score: number): string {
-  if (score >= 7) return 'bg-destructive text-destructive-foreground';
-  if (score >= 4) return 'bg-warning text-warning-foreground';
+  // Updated thresholds for actual score ranges (hundreds to thousands)
+  if (score >= 1000) return 'bg-destructive text-destructive-foreground';
+  if (score >= 500) return 'bg-warning text-warning-foreground';
   return 'bg-success text-success-foreground';
 }
 
 function getSeverityClass(score: number): string {
-  if (score >= 7) return 'bg-destructive';
-  if (score >= 4) return 'bg-warning';
+  // Updated thresholds for actual score ranges (hundreds to thousands)
+  if (score >= 1000) return 'bg-destructive';
+  if (score >= 500) return 'bg-warning';
   return 'bg-success';
 }
 
@@ -104,24 +113,24 @@ export function PatternCard({
     <Card
       data-testid="pattern-card"
       className={cn(
-        'cursor-pointer hover:shadow-md transition-shadow',
+        'cursor-pointer hover:shadow-md transition-shadow overflow-hidden w-full',
         isSelected && 'ring-2 ring-primary'
       )}
       onClick={() => onClick?.(pattern)}
     >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg truncate">{pattern.name}</CardTitle>
-            <p className="text-muted-foreground text-sm">
+      <CardHeader className="pb-2 block">
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <CardTitle className="text-lg truncate" title={pattern.name}>{pattern.name}</CardTitle>
+            <p className="text-muted-foreground text-sm truncate">
               {pattern.make} {pattern.model}
             </p>
           </div>
           <Badge
             data-testid="severity-badge"
-            className={cn('ml-2', getSeverityClass(pattern.severityScore))}
+            className={cn('shrink-0', getSeverityClass(pattern.severityScore))}
           >
-            {pattern.severityScore.toFixed(1)}
+            {formatSeverity(pattern.severityScore)}
           </Badge>
         </div>
       </CardHeader>

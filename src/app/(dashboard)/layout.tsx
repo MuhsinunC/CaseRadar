@@ -112,7 +112,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="p-4 md:p-6 lg:p-8">{children}</main>
+        <main className="p-4 md:p-6 lg:p-8 overflow-x-hidden">{children}</main>
       </div>
     </div>
   );

@@ -67,6 +67,22 @@ export async function GET(request: NextRequest) {
       where.make = { contains: make, mode: 'insensitive' };
     }
 
+    // Search filter (searches name, make, model, component)
+    const search = searchParams.get('search');
+    if (search) {
+      // Use AND to combine with existing OR clause
+      (where as Record<string, unknown>).AND = [
+        {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { make: { contains: search, mode: 'insensitive' } },
+            { model: { contains: search, mode: 'insensitive' } },
+            { component: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
+
     // Sorting - default by severityScore descending
     const sortBy = searchParams.get('sortBy') || 'severityScore';
     const sortOrder = searchParams.get('sortOrder') || 'desc';

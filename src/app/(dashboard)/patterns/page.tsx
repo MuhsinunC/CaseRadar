@@ -49,6 +49,7 @@ export default function PatternsPage() {
       setIsLoading(true);
       try {
         const params = new URLSearchParams();
+        params.set('limit', '100'); // Request more patterns
         if (searchQuery) params.set('search', searchQuery);
         if (minSeverity) params.set('minSeverity', minSeverity.toString());
 
@@ -85,13 +86,13 @@ export default function PatternsPage() {
 
   const severityFilters = [
     { label: 'All', value: undefined },
-    { label: 'High (7+)', value: 7 },
-    { label: 'Medium (4+)', value: 4 },
-    { label: 'Low (<4)', value: 0 },
+    { label: 'High (1000+)', value: 1000 },
+    { label: 'Medium (500+)', value: 500 },
+    { label: 'Low (<500)', value: 0 },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-hidden">
       <div>
         <h1 className="text-3xl font-bold">Pattern Detector</h1>
         <p className="text-muted-foreground">
@@ -131,7 +132,7 @@ export default function PatternsPage() {
           {patterns.length} patterns found
         </Badge>
         <Badge variant="destructive" className="text-sm py-1 px-3">
-          {patterns.filter((p) => p.severityScore >= 7).length} high severity
+          {patterns.filter((p) => p.severityScore >= 1000).length} high severity
         </Badge>
         <Badge variant="outline" className="text-sm py-1 px-3">
           {patterns.filter((p) => p.trendDirection === 'INCREASING').length} trending up
@@ -157,7 +158,7 @@ export default function PatternsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
           {patterns.map((pattern) => (
             <PatternCard
               key={pattern.id}
