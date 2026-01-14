@@ -1,15 +1,54 @@
 /**
  * NHTSA Data Sync Service
  * Handles synchronization of NHTSA complaint data with our database
+ * Includes embedding generation for semantic search and clustering
  */
 
 import { prisma } from '@/lib/db';
 import { nhtsaClient } from './client';
 import { transformSODARecords, calculateSeverityScore } from './transformer';
 import { SyncStatus, TransformedComplaint } from './types';
+import { generateEmbedding, formatEmbeddingForPgvector, getModelInfo, checkEmbeddingService } from '@/lib/embeddings';
 
 // Batch size for database inserts
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50; // Smaller batches for embedding generation
+
+// Check if embeddings are enabled (require Ollama to be running)
+let embeddingsEnabled = false;
+
+/**
+ * Initialize embedding service check
+ */
+async function initEmbeddingService(): Promise<boolean> {
+  try {
+    embeddingsEnabled = await checkEmbeddingService();
+    if (embeddingsEnabled) {
+      const info = getModelInfo();
+      console.log(`Embedding service ready: ${info.provider}/${info.model} (${info.dimensions} dims)`);
+    } else {
+      console.warn('Embedding service not available - complaints will be inserted without embeddings');
+    }
+    return embeddingsEnabled;
+  } catch {
+    console.warn('Embedding service check failed - continuing without embeddings');
+    return false;
+  }
+}
+
+/**
+ * Generate embedding text for a complaint
+ */
+function getEmbeddingText(complaint: TransformedComplaint): string {
+  return [
+    complaint.description,
+    `Vehicle: ${complaint.make} ${complaint.model} ${complaint.year}`,
+    `Component: ${complaint.component}`,
+    complaint.crash ? 'Crash reported' : '',
+    complaint.fire ? 'Fire reported' : '',
+    complaint.injuries > 0 ? `${complaint.injuries} injuries` : '',
+    complaint.deaths > 0 ? `${complaint.deaths} deaths` : '',
+  ].filter(Boolean).join(' | ');
+}
 
 /**
  * NHTSA Sync Service
@@ -83,30 +122,101 @@ export const nhtsaSyncService = {
   },
 
   /**
-   * Insert a batch of complaints
+   * Insert a batch of complaints with embeddings
    */
   async insertBatch(
     complaints: TransformedComplaint[]
   ): Promise<{ count: number }> {
-    return prisma.complaint.createMany({
-      data: complaints.map((c) => ({
-        nhtsaId: c.nhtsaId,
-        odiNumber: c.odiNumber,
-        manufacturer: c.manufacturer,
-        make: c.make,
-        model: c.model,
-        year: c.year,
-        component: c.component,
-        description: c.description,
-        crash: c.crash,
-        fire: c.fire,
-        injuries: c.injuries,
-        deaths: c.deaths,
-        failDate: c.failDate,
-        dateAdded: c.dateAdded,
-      })),
-      skipDuplicates: true,
-    });
+    // Check embedding service on first call
+    if (!embeddingsEnabled) {
+      await initEmbeddingService();
+    }
+
+    let count = 0;
+
+    for (const c of complaints) {
+      try {
+        // Check if complaint already exists
+        const existing = await prisma.complaint.findFirst({
+          where: { nhtsaId: c.nhtsaId },
+          select: { id: true },
+        });
+
+        if (existing) continue;
+
+        // Generate embedding if service is available
+        let embeddingVector: string | null = null;
+        if (embeddingsEnabled) {
+          try {
+            const text = getEmbeddingText(c);
+            const embedding = await generateEmbedding(text);
+            embeddingVector = formatEmbeddingForPgvector(embedding);
+          } catch (error) {
+            console.warn(`Embedding failed for complaint ${c.nhtsaId}:`, error);
+          }
+        }
+
+        // Insert with embedding using raw SQL for pgvector support
+        if (embeddingVector) {
+          await prisma.$executeRaw`
+            INSERT INTO "Complaint" (
+              id, "nhtsaId", "odiNumber", manufacturer, make, model, year,
+              component, description, crash, fire, injuries, deaths,
+              "failDate", "dateAdded", embedding, "createdAt", "updatedAt"
+            ) VALUES (
+              gen_random_uuid(),
+              ${c.nhtsaId},
+              ${c.odiNumber},
+              ${c.manufacturer},
+              ${c.make},
+              ${c.model},
+              ${c.year},
+              ${c.component},
+              ${c.description},
+              ${c.crash},
+              ${c.fire},
+              ${c.injuries},
+              ${c.deaths},
+              ${c.failDate},
+              ${c.dateAdded},
+              ${embeddingVector}::vector,
+              NOW(),
+              NOW()
+            )
+            ON CONFLICT ("nhtsaId") DO NOTHING
+          `;
+        } else {
+          // Insert without embedding
+          await prisma.complaint.create({
+            data: {
+              nhtsaId: c.nhtsaId,
+              odiNumber: c.odiNumber,
+              manufacturer: c.manufacturer,
+              make: c.make,
+              model: c.model,
+              year: c.year,
+              component: c.component,
+              description: c.description,
+              crash: c.crash,
+              fire: c.fire,
+              injuries: c.injuries,
+              deaths: c.deaths,
+              failDate: c.failDate,
+              dateAdded: c.dateAdded,
+            },
+          });
+        }
+
+        count++;
+      } catch (error) {
+        // Skip duplicates and other errors
+        if (!(error instanceof Error) || !error.message.includes('Unique constraint')) {
+          console.warn(`Error inserting complaint ${c.nhtsaId}:`, error);
+        }
+      }
+    }
+
+    return { count };
   },
 
   /**
@@ -207,6 +317,100 @@ export const nhtsaSyncService = {
 
     status.inProgress = false;
     return status;
+  },
+
+  /**
+   * Backfill embeddings for existing complaints without them
+   */
+  async backfillEmbeddings(limit: number = 1000): Promise<{
+    processed: number;
+    errors: number;
+    remaining: number;
+  }> {
+    // Initialize embedding service
+    await initEmbeddingService();
+
+    if (!embeddingsEnabled) {
+      throw new Error('Embedding service not available. Ensure Ollama is running: ollama serve');
+    }
+
+    // Count complaints without embeddings
+    const withoutEmbeddings = await prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) as count FROM "Complaint" WHERE embedding IS NULL
+    `;
+    const total = Number(withoutEmbeddings[0].count);
+
+    console.log(`Found ${total} complaints without embeddings`);
+
+    if (total === 0) {
+      return { processed: 0, errors: 0, remaining: 0 };
+    }
+
+    // Get batch of complaints
+    const complaints = await prisma.complaint.findMany({
+      where: {},
+      select: {
+        id: true,
+        description: true,
+        make: true,
+        model: true,
+        year: true,
+        component: true,
+        crash: true,
+        fire: true,
+        injuries: true,
+        deaths: true,
+      },
+      take: limit,
+    });
+
+    // Filter to only those without embeddings using raw query
+    const idsWithoutEmbeddings = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Complaint" WHERE embedding IS NULL LIMIT ${limit}
+    `;
+    const idsSet = new Set(idsWithoutEmbeddings.map(r => r.id));
+    const toProcess = complaints.filter(c => idsSet.has(c.id));
+
+    let processed = 0;
+    let errors = 0;
+
+    for (const c of toProcess) {
+      try {
+        const text = [
+          c.description,
+          `Vehicle: ${c.make} ${c.model} ${c.year}`,
+          `Component: ${c.component}`,
+          c.crash ? 'Crash reported' : '',
+          c.fire ? 'Fire reported' : '',
+          c.injuries > 0 ? `${c.injuries} injuries` : '',
+          c.deaths > 0 ? `${c.deaths} deaths` : '',
+        ].filter(Boolean).join(' | ');
+
+        const embedding = await generateEmbedding(text);
+        const vectorStr = formatEmbeddingForPgvector(embedding);
+
+        await prisma.$executeRaw`
+          UPDATE "Complaint"
+          SET embedding = ${vectorStr}::vector
+          WHERE id = ${c.id}
+        `;
+
+        processed++;
+
+        if (processed % 100 === 0) {
+          console.log(`Backfill progress: ${processed}/${toProcess.length}`);
+        }
+      } catch (error) {
+        errors++;
+        console.warn(`Embedding backfill failed for ${c.id}:`, error);
+      }
+    }
+
+    return {
+      processed,
+      errors,
+      remaining: total - processed,
+    };
   },
 
   /**

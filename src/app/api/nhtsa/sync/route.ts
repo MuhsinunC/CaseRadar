@@ -66,9 +66,14 @@ export async function POST(request: NextRequest) {
         );
         break;
 
+      case 'backfill-embeddings':
+        console.log(`Starting embedding backfill for ${limit} complaints...`);
+        result = await nhtsaSyncService.backfillEmbeddings(limit);
+        break;
+
       default:
         return NextResponse.json(
-          { error: 'Invalid sync type. Use: new, high-severity, or backfill' },
+          { error: 'Invalid sync type. Use: new, high-severity, backfill, or backfill-embeddings' },
           { status: 400 }
         );
     }

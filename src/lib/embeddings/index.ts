@@ -5,6 +5,7 @@ export {
   cosineSimilarity,
   formatEmbeddingForPgvector,
   getModelInfo,
+  checkEmbeddingService,
 } from './openai';
 
 export { complaintEmbedder } from './complaint-embedder';

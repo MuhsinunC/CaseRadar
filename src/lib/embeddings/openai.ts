@@ -1,24 +1,41 @@
 /**
- * OpenAI Embeddings Service
- * Generates vector embeddings for complaint text using OpenAI's text-embedding-3-small model
+ * Embeddings Service (OpenAI-compatible)
+ * Supports both local Ollama and OpenAI API via environment variables
+ *
+ * Configure via environment variables:
+ * - EMBEDDING_PROVIDER: 'ollama' (default) or 'openai'
+ * - EMBEDDING_API_URL: Base URL (default: http://localhost:11434/v1 for Ollama)
+ * - EMBEDDING_API_KEY: API key (optional for Ollama, required for OpenAI)
+ * - EMBEDDING_MODEL: Model name (default: nomic-embed-text for Ollama)
  */
 
-import OpenAI from 'openai';
+// Provider and model configuration
+const PROVIDER = process.env.EMBEDDING_PROVIDER || 'ollama';
+const API_URL = process.env.EMBEDDING_API_URL || (PROVIDER === 'openai'
+  ? 'https://api.openai.com/v1'
+  : 'http://localhost:11434/v1');
+const API_KEY = process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY || '';
+const MODEL = process.env.EMBEDDING_MODEL || (PROVIDER === 'openai'
+  ? 'text-embedding-3-small'
+  : 'nomic-embed-text');
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Model dimensions
+const MODEL_DIMENSIONS: Record<string, number> = {
+  'nomic-embed-text': 768,
+  'mxbai-embed-large': 1024,
+  'text-embedding-ada-002': 1536,
+  'text-embedding-3-small': 1536,
+  'text-embedding-3-large': 3072,
+  'all-minilm': 384,
+  'qwen3-embedding': 1024,
+};
 
-// Model configuration
-const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIMENSIONS = 1536;
+const EMBEDDING_DIMENSIONS = MODEL_DIMENSIONS[MODEL] || 768;
 const MAX_TOKENS = 8191;
 const MAX_BATCH_SIZE = 100;
 
 /**
  * Truncate text to fit within token limits
- * Rough estimate: 1 token ≈ 4 characters
  */
 function truncateText(text: string, maxChars: number = MAX_TOKENS * 4): string {
   if (text.length <= maxChars) {
@@ -34,8 +51,8 @@ function prepareText(text: string): string {
   return truncateText(
     text
       .trim()
-      .replace(/\s+/g, ' ') // Normalize whitespace
-      .replace(/[^\x20-\x7E]/g, '') // Remove non-ASCII characters
+      .replace(/\s+/g, ' ')
+      .replace(/[^\x20-\x7E]/g, '')
   );
 }
 
@@ -49,12 +66,41 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     throw new Error('Empty text provided for embedding');
   }
 
-  const response = await openai.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: cleanText,
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (API_KEY) {
+    headers['Authorization'] = `Bearer ${API_KEY}`;
+  }
+
+  const response = await fetch(`${API_URL}/embeddings`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: MODEL,
+      input: cleanText,
+    }),
   });
 
-  return response.data[0].embedding;
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Embedding API error: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+
+  // OpenAI format: { data: [{ embedding: [...] }] }
+  if (data.data && Array.isArray(data.data) && data.data[0]?.embedding) {
+    return data.data[0].embedding;
+  }
+
+  // Ollama native format: { embedding: [...] }
+  if (data.embedding) {
+    return data.embedding;
+  }
+
+  throw new Error('Unexpected embedding response format');
 }
 
 /**
@@ -75,12 +121,36 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
     throw new Error('No valid texts after cleaning');
   }
 
-  const response = await openai.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: cleanTexts,
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (API_KEY) {
+    headers['Authorization'] = `Bearer ${API_KEY}`;
+  }
+
+  const response = await fetch(`${API_URL}/embeddings`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: MODEL,
+      input: cleanTexts,
+    }),
   });
 
-  return response.data.map((d) => d.embedding);
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Embedding API error: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+
+  // OpenAI format
+  if (data.data && Array.isArray(data.data)) {
+    return data.data.map((d: { embedding: number[] }) => d.embedding);
+  }
+
+  throw new Error('Unexpected batch embedding response format');
 }
 
 /**
@@ -103,11 +173,9 @@ export async function generateEmbeddingsBatched(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(`Batch ${Math.floor(i / batchSize)} failed: ${message}`);
-      // Add placeholder embeddings for failed batch
       embeddings.push(...batch.map(() => []));
     }
 
-    // Rate limiting
     if (i + batchSize < texts.length) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
@@ -156,9 +224,23 @@ export function formatEmbeddingForPgvector(embedding: number[]): string {
  */
 export function getModelInfo() {
   return {
-    model: EMBEDDING_MODEL,
+    provider: PROVIDER,
+    model: MODEL,
     dimensions: EMBEDDING_DIMENSIONS,
     maxTokens: MAX_TOKENS,
     maxBatchSize: MAX_BATCH_SIZE,
+    apiUrl: API_URL,
   };
+}
+
+/**
+ * Check if the embedding service is available
+ */
+export async function checkEmbeddingService(): Promise<boolean> {
+  try {
+    const result = await generateEmbedding('test connection');
+    return result.length > 0;
+  } catch {
+    return false;
+  }
 }
