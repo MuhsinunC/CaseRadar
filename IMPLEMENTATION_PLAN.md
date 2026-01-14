@@ -1530,7 +1530,7 @@ export const FLAGS: Record<FeatureFlag, FeatureFlagConfig> = {
 
 ---
 
-## P1-2: AI Service Health Checks
+## P1-2: AI Service Health Checks - IMPLEMENTED
 
 **Document Reference:** 02-api-routes.md, 12-reliability-scalability.md
 **Endpoint:** `GET /api/health/services`
@@ -1735,18 +1735,18 @@ export async function GET(request: NextRequest) {
 
 ### Acceptance Criteria
 
-- [ ] Test file created and all tests initially fail
-- [ ] Route updated to check all AI services
-- [ ] OpenAI connectivity test (embeddings API)
-- [ ] Anthropic connectivity test (messages API)
-- [ ] Clerk API check
-- [ ] Stripe API check
-- [ ] Sentry configuration check
-- [ ] Latency tracking with degraded threshold (2s)
-- [ ] Overall status aggregation
-- [ ] 30-second caching with force bypass
-- [ ] 503 status code when unhealthy
-- [ ] All tests pass
+- [x] Test file created and all tests initially fail
+- [x] Route updated to check all AI services
+- [x] OpenAI connectivity test (embeddings API)
+- [x] Anthropic connectivity test (messages API)
+- [x] Clerk API check
+- [x] Stripe API check
+- [x] Sentry configuration check
+- [x] Latency tracking with degraded threshold (2s)
+- [x] Overall status aggregation
+- [x] 30-second caching with force bypass
+- [x] 503 status code when unhealthy
+- [x] All tests pass (21 tests)
 
 ### Dependencies
 
