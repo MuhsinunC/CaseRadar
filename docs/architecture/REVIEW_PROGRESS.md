@@ -91,6 +91,27 @@ Track the iterative review and improvement of CaseRadar architecture documentati
   - Feature flags - included in testing doc
   - i18n/localization - out of scope for MVP
 
+### Iteration 4 (Ralph Loop - Deep Security Review)
+- **Focus**: Threat Modeling, Attack Surface Analysis, Data Governance, Business Continuity
+- **Documents Reviewed**: 09-security-compliance.md, all existing docs for gaps
+- **Critical Gaps Found**:
+  - No formal threat model (STRIDE analysis)
+  - No attack surface inventory
+  - Webhook replay attack prevention not documented
+  - Cross-tenant data leakage scenarios not analyzed
+  - No security testing requirements
+  - No data classification scheme
+  - No e-Discovery procedures for legal customers
+  - No GDPR Article 30 records of processing
+  - No business continuity plan
+  - No incident communication templates
+  - No SLA credit procedures
+- **Improvements Made**:
+  - Created 15-threat-model.md (STRIDE analysis, attack surface, webhook security)
+  - Created 16-data-governance.md (data classification, GDPR, e-Discovery, privacy)
+  - Created 17-business-continuity.md (BCP, incident comms, SLAs, escalation)
+- **Status**: In Progress - Reviewing for additional gaps
+
 ---
 
 ## Completion Criteria
@@ -144,7 +165,10 @@ All areas must be marked DONE with these attestations:
 | Reliability | 1 | 13 | Complete |
 | Testing & Dev | 1 | 15 | Complete |
 | Monitoring | 1 | 12 | Complete |
-| **Total** | **15** | **~197** | **Complete** |
+| Threat Model | 1 | 10 | Complete |
+| Data Governance | 1 | 8 | Complete |
+| Business Continuity | 1 | 6 | Complete |
+| **Total** | **18** | **~231** | **Complete** |
 
 ### Enterprise Readiness Attestation
 
