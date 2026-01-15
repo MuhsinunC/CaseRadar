@@ -1,39 +1,36 @@
+# CaseRadar Next.js Horizontal Pod Autoscaler
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: embedding-service-hpa
-  namespace: embedding
+  name: caseradar-hpa
+  namespace: web
   labels:
-    app: embedding-service
+    app: caseradar
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: embedding-service
-  # Local development: 1-4 pods (single machine)
-  # Production (GKE/EKS/AKS): change to 2-40 pods
+    name: caseradar
+  # Local development: 1-4 pods
+  # Production: change to 2-20 pods
   minReplicas: 1
   maxReplicas: 4
   metrics:
-  # CPU utilization only - memory isn't useful for ML inference
-  # (model consumes fixed ~1GB RAM regardless of load)
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 60
+        averageUtilization: 70
   behavior:
     scaleUp:
-      # React quickly to load
       stabilizationWindowSeconds: 30
       policies:
       - type: Pods
-        value: 2  # Add up to 2 pods at once
+        value: 2
         periodSeconds: 30
       selectPolicy: Max
     scaleDown:
-      # Conservative scale-down
       stabilizationWindowSeconds: 300
       policies:
       - type: Pods

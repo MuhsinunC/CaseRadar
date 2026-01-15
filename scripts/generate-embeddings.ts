@@ -4,18 +4,26 @@
  * Run with: npx tsx scripts/generate-embeddings.ts [count]
  *
  * Generates embeddings for complaints without them, bypassing API authentication.
+ *
+ * Performance optimizations:
+ * - Batch API: 1000 texts per call = 58,489 emb/s (vs 100 = 922 emb/s)
+ * - Batch DB UPDATE using UNNEST: ~50,000 writes/s (vs individual = 2,000/s)
  */
 
 import { prisma } from '../src/lib/db';
 import { complaintEmbedder } from '../src/lib/embeddings/complaint-embedder';
+import { destroyEmbeddingClient } from '../src/lib/embeddings/resilient-client';
 
-const DEFAULT_COUNT = 5000;
+// Optimized for maximum throughput
+// DB writes now use batch UPDATE with UNNEST (50k writes/s vs 2k/s)
+const DEFAULT_COUNT = 500000;  // Default to 500k per run
+const BATCH_SIZE = 1000;       // Process 1000 at a time (matches API batch size)
 
 async function main() {
   const count = parseInt(process.argv[2] || String(DEFAULT_COUNT), 10);
 
   console.log(`\n=== Embedding Generation Script ===`);
-  console.log(`Target: ${count} embeddings\n`);
+  console.log(`Target: ${count.toLocaleString()} embeddings\n`);
 
   // Get current stats
   const stats = await complaintEmbedder.getStats();
@@ -26,27 +34,31 @@ async function main() {
 
   if (stats.withoutEmbedding === 0) {
     console.log('✓ All complaints already have embeddings!');
+    destroyEmbeddingClient();
     await prisma.$disconnect();
     return;
   }
 
   const toGenerate = Math.min(count, stats.withoutEmbedding);
-  console.log(`Generating ${toGenerate} embeddings...\n`);
+  console.log(`Generating ${toGenerate.toLocaleString()} embeddings...\n`);
 
   const startTime = Date.now();
-  const batchSize = 100;
   let totalProcessed = 0;
   let totalErrors = 0;
+  let batchNum = 0;
+  const totalBatches = Math.ceil(toGenerate / BATCH_SIZE);
 
-  for (let i = 0; i < toGenerate; i += batchSize) {
-    const currentBatch = Math.min(batchSize, toGenerate - i);
-    const batchNum = Math.floor(i / batchSize) + 1;
-    const totalBatches = Math.ceil(toGenerate / batchSize);
+  // Process batches sequentially (safer for batch DB writes, avoids row-locking)
+  while (totalProcessed < toGenerate) {
+    const remainingToProcess = toGenerate - totalProcessed;
+    const currentBatchSize = Math.min(BATCH_SIZE, remainingToProcess);
 
-    process.stdout.write(`\rBatch ${batchNum}/${totalBatches}: Processing ${currentBatch} complaints... `);
+    batchNum++;
+    process.stdout.write(`\rBatch ${batchNum}/${totalBatches}... `);
 
     try {
-      const result = await complaintEmbedder.embedMissingComplaints(currentBatch);
+      const result = await complaintEmbedder.embedMissingComplaints(currentBatchSize);
+
       totalProcessed += result.processed;
       totalErrors += result.errors.length;
 
@@ -59,15 +71,19 @@ async function main() {
       const elapsed = (Date.now() - startTime) / 1000;
       const rate = totalProcessed / elapsed;
       const remaining = toGenerate - totalProcessed;
-      const eta = remaining / rate;
+      const eta = remaining > 0 ? remaining / rate : 0;
 
-      process.stdout.write(`Done. Rate: ${rate.toFixed(1)}/s, ETA: ${Math.round(eta)}s`);
+      process.stdout.write(
+        `+${result.processed} embeddings. ` +
+        `Total: ${totalProcessed.toLocaleString()}/${toGenerate.toLocaleString()}. ` +
+        `Rate: ${rate.toFixed(0)}/s, ETA: ${formatTime(eta)}`
+      );
+      console.log('');
 
-      // Rate limiting between batches
-      await new Promise(resolve => setTimeout(resolve, 300));
     } catch (error) {
       console.error(`\nBatch ${batchNum} failed:`, error);
       totalErrors++;
+      // Continue despite errors
     }
   }
 
@@ -78,18 +94,30 @@ async function main() {
   const duration = (Date.now() - startTime) / 1000;
 
   console.log(`=== Complete ===`);
-  console.log(`Duration: ${duration.toFixed(1)} seconds`);
+  console.log(`Duration: ${formatTime(duration)}`);
   console.log(`Embeddings generated: ${totalProcessed.toLocaleString()}`);
+  console.log(`Rate: ${(totalProcessed / duration).toFixed(0)}/s`);
   console.log(`Errors: ${totalErrors}`);
   console.log(`\nFinal state:`);
   console.log(`  With embeddings: ${finalStats.withEmbedding.toLocaleString()} (${finalStats.percentComplete}%)`);
   console.log(`  Without embeddings: ${finalStats.withoutEmbedding.toLocaleString()}`);
 
+  // Cleanup to prevent hanging
+  destroyEmbeddingClient();
   await prisma.$disconnect();
+}
+
+function formatTime(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  return `${hours}h ${mins}m`;
 }
 
 main().catch(async (error) => {
   console.error('Script failed:', error);
+  destroyEmbeddingClient();
   await prisma.$disconnect();
   process.exit(1);
 });

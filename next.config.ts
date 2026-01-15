@@ -52,6 +52,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Standalone output for Docker deployment
+  // Creates a minimal production build with all dependencies
+  output: 'standalone',
+
   // Security headers for all routes
   async headers() {
     return [

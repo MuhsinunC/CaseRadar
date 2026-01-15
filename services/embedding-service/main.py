@@ -622,4 +622,24 @@ async def metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    import os
+
+    # Get number of workers from environment (default 1 for single-process)
+    # For production: use gunicorn with multiple workers
+    # For local testing: uvicorn with workers option
+    workers = int(os.getenv("EMBEDDING_WORKERS", "1"))
+
+    if workers > 1:
+        # Multi-worker mode - each worker loads model independently
+        # This bypasses Python GIL for true parallelism
+        print(f"Starting with {workers} workers (bypassing GIL)")
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port=8080,
+            workers=workers,
+            log_level="info"
+        )
+    else:
+        # Single worker mode
+        uvicorn.run(app, host="0.0.0.0", port=8080)

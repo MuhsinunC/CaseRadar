@@ -1,0 +1,20 @@
+# PostgreSQL initialization scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: database
+  labels:
+    app: postgres
+data:
+  init.sql: |
+    -- Initialize CaseRadar Database
+    -- Enable required extensions
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "vector";
+
+    -- Log successful initialization
+    DO $$
+    BEGIN
+      RAISE NOTICE 'CaseRadar database initialized with pgvector extension';
+    END $$;

@@ -1,0 +1,37 @@
+# CaseRadar Next.js Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: caseradar
+  namespace: web
+  labels:
+    app: caseradar
+spec:
+  selector:
+    app: caseradar
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+---
+# NodePort for local development access
+# In production: use Ingress with TLS instead
+apiVersion: v1
+kind: Service
+metadata:
+  name: caseradar-external
+  namespace: web
+  labels:
+    app: caseradar
+spec:
+  selector:
+    app: caseradar
+  ports:
+  - port: 80
+    targetPort: 3000
+    nodePort: 30000
+    protocol: TCP
+    name: http
+  type: NodePort

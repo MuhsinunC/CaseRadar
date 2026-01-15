@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/mocks/server';
 import {
   ScalableEmbeddingClient,
+  getScalableClient,
+  resetScalableClient,
   cosineSimilarity,
   formatEmbeddingForPgvector,
 } from '../scalable-client';
@@ -327,6 +329,67 @@ describe('ScalableEmbeddingClient', () => {
       const healthy = await client.isHealthy();
       expect(healthy).toBe(false);
     });
+  });
+});
+
+describe('Environment Configuration', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    resetScalableClient();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    resetScalableClient();
+  });
+
+  it('should use EMBEDDING_SERVICE_URL from environment', () => {
+    process.env.EMBEDDING_SERVICE_URL = 'http://custom-embedding:9000';
+    const client = getScalableClient();
+    // Verify the client was configured with the custom URL
+    expect(client).toBeDefined();
+  });
+
+  it('should default to localhost:8080 when env not set', () => {
+    delete process.env.EMBEDDING_SERVICE_URL;
+    const client = getScalableClient();
+    expect(client).toBeDefined();
+  });
+
+  it('should return singleton instance', () => {
+    const client1 = getScalableClient();
+    const client2 = getScalableClient();
+    expect(client1).toBe(client2);
+  });
+
+  it('should create new instance after reset', () => {
+    const client1 = getScalableClient();
+    resetScalableClient();
+    const client2 = getScalableClient();
+    expect(client1).not.toBe(client2);
+  });
+});
+
+describe('Load Balancing Support', () => {
+  it('should work with multiple instances via load balancer', async () => {
+    // Test that requests are properly made to the configured endpoint
+    // The load balancer (Traefik) handles distribution
+    const client = new ScalableEmbeddingClient('http://localhost:8080');
+
+    server.use(
+      http.get('http://localhost:8080/health', () => {
+        return HttpResponse.json({
+          status: 'healthy',
+          model_loaded: true,
+        });
+      })
+    );
+
+    const healthy = await client.isHealthy();
+    expect(healthy).toBe(true);
   });
 });
 

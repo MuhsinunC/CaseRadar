@@ -236,6 +236,13 @@ let defaultClient: ScalableEmbeddingClient | null = null;
 
 /**
  * Get the default scalable embedding client.
+ * Uses EMBEDDING_SERVICE_URL environment variable or defaults to localhost:8080.
+ *
+ * For local development with Docker Compose scaling:
+ *   EMBEDDING_SERVICE_URL=http://localhost:8080 (Traefik load balancer)
+ *
+ * For production with Kubernetes:
+ *   EMBEDDING_SERVICE_URL=http://embedding-service (K8s Service)
  */
 export function getScalableClient(): ScalableEmbeddingClient {
   if (!defaultClient) {
@@ -243,6 +250,13 @@ export function getScalableClient(): ScalableEmbeddingClient {
     defaultClient = new ScalableEmbeddingClient(baseUrl);
   }
   return defaultClient;
+}
+
+/**
+ * Reset the singleton client (for testing purposes).
+ */
+export function resetScalableClient(): void {
+  defaultClient = null;
 }
 
 /**

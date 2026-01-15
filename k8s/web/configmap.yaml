@@ -1,0 +1,27 @@
+# Next.js App Configuration (non-sensitive)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caseradar-config
+  namespace: web
+  labels:
+    app: caseradar
+data:
+  NODE_ENV: "production"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+  # Clerk URLs
+  NEXT_PUBLIC_CLERK_SIGN_IN_URL: "/sign-in"
+  NEXT_PUBLIC_CLERK_SIGN_UP_URL: "/sign-up"
+  NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: "/dashboard"
+  NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: "/dashboard"
+
+  # App URL (update for production domain)
+  NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+  # NHTSA API (public, no key required)
+  NHTSA_API_BASE_URL: "https://api.nhtsa.gov"
+
+  # Feature flags
+  ENABLE_ANALYTICS: "true"
+  ENABLE_EMAIL_NOTIFICATIONS: "true"

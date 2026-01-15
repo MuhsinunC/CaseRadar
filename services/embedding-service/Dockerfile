@@ -16,8 +16,9 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the model during build (optional, but speeds up startup)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True)"
+# Model downloads at runtime on first request
+# This keeps the image small (~1GB vs ~4GB with pre-downloaded model)
+# For faster startup in production, use a shared PersistentVolume for the model cache
 
 # Copy application code
 COPY main.py .
@@ -30,5 +31,11 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the service
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Environment for worker configuration
+# For K8s: use 1 worker per pod, scale with HPA (default)
+# For single-node: set EMBEDDING_WORKERS to 2-8
+ENV EMBEDDING_WORKERS=1
+
+# Run the service with configurable workers
+# Using python main.py allows dynamic worker configuration
+CMD ["python", "main.py"]

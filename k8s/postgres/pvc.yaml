@@ -1,0 +1,19 @@
+# Persistent storage for PostgreSQL data
+# For production: use cloud storage class (pd-ssd, gp3, etc.)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: database
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # Local: uses default storage class
+  # Production: specify cloud storage class
+  # storageClassName: pd-ssd  # GKE
+  # storageClassName: gp3     # EKS

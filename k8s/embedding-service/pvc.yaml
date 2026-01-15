@@ -1,0 +1,17 @@
+# PersistentVolumeClaim for shared HuggingFace model cache
+# All pods share this volume - only one copy of the model is stored
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache
+  namespace: embedding
+  labels:
+    app: embedding-service
+spec:
+  accessModes:
+    - ReadWriteMany  # Multiple pods can read simultaneously
+  resources:
+    requests:
+      storage: 5Gi  # Model is ~1.5GB, extra space for cache
+  # For minikube/Docker Desktop: uses default storage class
+  # For GKE/EKS/AKS: specify cloud storage class in production

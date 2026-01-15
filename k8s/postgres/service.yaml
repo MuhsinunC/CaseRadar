@@ -1,0 +1,38 @@
+# PostgreSQL Service
+# ClusterIP for internal access, NodePort for local dev access
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: database
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  type: ClusterIP
+---
+# NodePort for local development access from host machine
+# In production: remove this and use internal ClusterIP only
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-external
+  namespace: database
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+    nodePort: 30432
+    protocol: TCP
+    name: postgres
+  type: NodePort
