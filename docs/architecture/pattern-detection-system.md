@@ -1,8 +1,20 @@
 # CaseRadar Pattern Detection System Architecture
 
-**Version:** 3.2
+**Version:** 3.3
 **Last Updated:** January 2025
 **Status:** Ready for Principal Engineer Review
+
+---
+
+## How to Use This Document
+
+| If You Are... | Start Here | Key Sections |
+|---------------|------------|--------------|
+| **Executive/PM** | [Executive Summary](#executive-summary) | TL;DR box, Key Recommendations, Cost Analysis (Appendix C) |
+| **Backend Engineer** | [Recommended Architecture](#recommended-architecture) | Component Deep Dives, API Design (Appendix F) |
+| **Data Scientist** | [Approach Catalog](#approach-catalog) | Decision Framework, Trade-off Analysis |
+| **DevOps/SRE** | [Migration Strategy](#migration-strategy) | Monitoring, SLA/DR (Appendix I), On-Call Runbook (Appendix J) |
+| **Reviewer** | [Open Questions & Risks](#open-questions--risks) | ADRs, Edge Cases (Appendix K), Testing Strategy (Appendix E) |
 
 ---
 
@@ -489,7 +501,40 @@ graph TD
 
 ## Recommended Architecture
 
-### High-Level Architecture
+### System Context (C4 Level 1)
+
+This diagram shows the system boundary and how external actors interact with CaseRadar.
+
+```mermaid
+graph TB
+    subgraph "Users"
+        U1[👤 Attorney<br/>Reviews patterns,<br/>generates complaints]
+        U2[👤 Analyst<br/>Monitors trends,<br/>investigates signals]
+        U3[👤 Admin<br/>Configures thresholds,<br/>manages system]
+    end
+
+    subgraph "CaseRadar System"
+        SYS[🔍 Pattern Detection System<br/><br/>Identifies emerging defect patterns,<br/>anomalies, and trends from<br/>NHTSA complaint data]
+    end
+
+    subgraph "External Systems"
+        EXT1[📊 NHTSA API<br/>Source of complaint data]
+        EXT2[🤖 OpenAI API<br/>Embedding generation<br/>optional]
+        EXT3[📧 Email/Slack<br/>Alert notifications]
+    end
+
+    U1 --> SYS
+    U2 --> SYS
+    U3 --> SYS
+
+    EXT1 -->|Daily sync| SYS
+    SYS -->|Embedding requests| EXT2
+    SYS -->|Signal alerts| EXT3
+
+    style SYS fill:#1168bd,stroke:#0b4884,color:#fff
+```
+
+### High-Level Architecture (C4 Level 2)
 
 ```mermaid
 graph TB
@@ -3450,10 +3495,10 @@ async def run_pipeline(complaints):
 
 ---
 
-*Document Version: 3.2 | Status: Ready for Principal Engineer Review*
-*Total Sections: 16 main + 11 appendices (~3,500 lines)*
+*Document Version: 3.3 | Status: Ready for Principal Engineer Review*
+*Total Sections: 16 main + 11 appendices (~3,550 lines)*
 *Coverage: Architecture, Implementation, Migration, ADRs, Risks, Operations, Security, Cost, Evaluation, Edge Cases*
-*Iteration: 5 - Added Open Questions & Risks section*
+*Iteration: 6 - Added C4 System Context diagram, How to Use This Document guide*
 *Changelog:*
 - *v1.0: Initial architecture draft*
 - *v2.0: Added Success Metrics, Backtesting Protocol, Quality Gates*
@@ -3461,4 +3506,5 @@ async def run_pipeline(complaints):
 - *v3.0: Added Migration Strategy, 6 ADRs, Edge Cases appendix*
 - *v3.1: Added TL;DR Quick Reference, Scope & Non-Goals, Dependency diagram*
 - *v3.2: Added Open Questions & Risks section (5 questions, 5 risks, 4 deferred decisions)*
+- *v3.3: Added C4 System Context diagram, How to Use This Document navigation guide*
 *Next Step: Principal engineer review and stakeholder sign-off*
