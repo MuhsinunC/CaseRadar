@@ -1,6 +1,6 @@
 # CaseRadar Pattern Detection System Architecture
 
-**Version:** 3.3
+**Version:** 3.4
 **Last Updated:** January 2025
 **Status:** Ready for Principal Engineer Review
 
@@ -49,6 +49,7 @@
 - [I: SLA & Disaster Recovery](#appendix-i-sla--disaster-recovery)
 - [J: On-Call Runbook](#appendix-j-on-call-runbook)
 - [K: Edge Cases & Boundary Conditions](#appendix-k-edge-cases--boundary-conditions)
+- [L: Sample Outputs & Examples](#appendix-l-sample-outputs--examples)
 
 ---
 
@@ -3495,10 +3496,203 @@ async def run_pipeline(complaints):
 
 ---
 
-*Document Version: 3.3 | Status: Ready for Principal Engineer Review*
-*Total Sections: 16 main + 11 appendices (~3,550 lines)*
-*Coverage: Architecture, Implementation, Migration, ADRs, Risks, Operations, Security, Cost, Evaluation, Edge Cases*
-*Iteration: 6 - Added C4 System Context diagram, How to Use This Document guide*
+## Appendix L: Sample Outputs & Examples
+
+This appendix shows concrete examples of what the system produces to help reviewers understand the end result.
+
+### Sample Pattern Output
+
+```json
+{
+  "id": "pat_2025_001",
+  "name": "Honda Accord Brake Pedal Failure",
+  "description": "Brake pedal goes to floor with little to no stopping power. ABS light may illuminate. Occurs primarily in cold weather conditions.",
+  "topic_words": ["brake", "pedal", "floor", "abs", "stopping", "power", "cold", "weather"],
+  "coherence_score": 0.52,
+  "make": "HONDA",
+  "model": "ACCORD",
+  "year_range": {
+    "start": 2018,
+    "end": 2022
+  },
+  "component": "SERVICE BRAKES",
+  "severity_score": 1247,
+  "trend_direction": "INCREASING",
+  "statistics": {
+    "complaint_count": 342,
+    "death_count": 2,
+    "injury_count": 47,
+    "crash_count": 89
+  },
+  "temporal": {
+    "first_complaint": "2019-03-15",
+    "last_complaint": "2025-01-10",
+    "peak_month": "2024-01",
+    "growth_rate_90d": 0.23
+  },
+  "related_patterns": ["pat_2024_087", "pat_2024_156"],
+  "created_at": "2025-01-14T02:30:00Z",
+  "updated_at": "2025-01-14T02:30:00Z"
+}
+```
+
+### Sample Anomaly Output
+
+```json
+{
+  "complaint_id": "NHTSA-11234567",
+  "anomaly_scores": {
+    "isolation_forest": 0.87,
+    "local_outlier_factor": 0.72,
+    "histogram_based": 0.65,
+    "ensemble": 0.78
+  },
+  "is_anomaly": true,
+  "anomaly_type": "component_mismatch",
+  "explanation": "Complaint describes steering failure but is categorized under 'ELECTRICAL SYSTEM'. Text embedding is distant from typical electrical complaints.",
+  "nearest_pattern": {
+    "id": "pat_2024_203",
+    "name": "Power Steering Sudden Loss",
+    "similarity": 0.89
+  },
+  "recommended_action": "Manual review - possible miscategorization",
+  "detected_at": "2025-01-14T02:35:00Z"
+}
+```
+
+### Sample Signal Detection Output
+
+```json
+{
+  "id": "sig_2025_012",
+  "signal_type": "disproportionality",
+  "component": "FUEL SYSTEM, GASOLINE:DELIVERY:FUEL PUMP",
+  "make": "FORD",
+  "model": "F-150",
+  "year_range": {
+    "start": 2021,
+    "end": 2023
+  },
+  "metrics": {
+    "observed_count": 187,
+    "expected_count": 42,
+    "prr": 4.45,
+    "prr_ci_lower": 3.21,
+    "prr_ci_upper": 6.17,
+    "ebgm": 3.89
+  },
+  "strength": "strong",
+  "confidence": "high",
+  "comparison_context": "vs all fuel pump complaints across all makes/models",
+  "temporal_trend": {
+    "direction": "increasing",
+    "change_point_detected": "2024-06-15",
+    "pre_change_rate": 2.3,
+    "post_change_rate": 8.7
+  },
+  "related_recalls": [],
+  "recommended_action": "Escalate to legal review - high PRR with increasing trend",
+  "detected_at": "2025-01-14T02:40:00Z"
+}
+```
+
+### Sample Change Point Output
+
+```json
+{
+  "id": "cp_2025_003",
+  "pattern_id": "pat_2024_087",
+  "pattern_name": "Tesla Model 3 Phantom Braking",
+  "change_date": "2024-08-22",
+  "change_type": "increase",
+  "metrics": {
+    "pre_change_rate": 12.3,
+    "post_change_rate": 47.8,
+    "magnitude": 2.89,
+    "confidence": 0.94
+  },
+  "context": {
+    "software_update_nearby": true,
+    "recall_announced": false,
+    "news_coverage": true
+  },
+  "explanation": "Complaint rate increased 289% starting August 2024. Coincides with FSD 12.5 software release.",
+  "detected_at": "2025-01-14T02:45:00Z"
+}
+```
+
+### Sample Alert Output (for Slack/Email)
+
+```
+🚨 NEW STRONG SIGNAL DETECTED
+
+Component: FUEL PUMP (Ford F-150 2021-2023)
+Signal Strength: STRONG (PRR: 4.45)
+
+📊 Statistics:
+• Observed: 187 complaints
+• Expected: 42 complaints
+• 4.45x higher than baseline
+
+📈 Trend: INCREASING
+• Change point: June 15, 2024
+• Rate increased from 2.3/month to 8.7/month
+
+⚠️ No related recalls found
+
+🔗 Actions:
+• View in Dashboard: https://caseradar.app/signals/sig_2025_012
+• Generate Complaint Draft: https://caseradar.app/generate?signal=sig_2025_012
+• Mark as Reviewed: Reply "reviewed sig_2025_012"
+
+---
+CaseRadar Pattern Detection v3.3 | Auto-generated alert
+```
+
+### Sample Dashboard Summary
+
+```json
+{
+  "summary_date": "2025-01-14",
+  "patterns": {
+    "total": 847,
+    "high_severity": 89,
+    "increasing_trend": 156,
+    "new_this_week": 12
+  },
+  "anomalies": {
+    "total_flagged": 234,
+    "pending_review": 47,
+    "auto_resolved": 187
+  },
+  "signals": {
+    "strong": 8,
+    "weak": 34,
+    "noise": 156
+  },
+  "change_points": {
+    "detected_this_month": 23,
+    "significant": 7
+  },
+  "top_patterns_by_severity": [
+    {"name": "Honda Accord Brake Pedal Failure", "score": 1247},
+    {"name": "Tesla Model 3 Phantom Braking", "score": 1156},
+    {"name": "Ford F-150 Fuel Pump Failure", "score": 987}
+  ],
+  "top_signals_by_prr": [
+    {"component": "Fuel Pump (Ford F-150)", "prr": 4.45},
+    {"component": "Brake Master Cylinder (Honda Accord)", "prr": 3.87},
+    {"component": "Steering Column (Hyundai Tucson)", "prr": 3.21}
+  ]
+}
+```
+
+---
+
+*Document Version: 3.4 | Status: Ready for Principal Engineer Review*
+*Total Sections: 16 main + 12 appendices (~3,700 lines)*
+*Coverage: Architecture, Implementation, Migration, ADRs, Risks, Operations, Security, Cost, Evaluation, Edge Cases, Sample Outputs*
+*Iteration: 7 - Added Sample Outputs & Examples appendix*
 *Changelog:*
 - *v1.0: Initial architecture draft*
 - *v2.0: Added Success Metrics, Backtesting Protocol, Quality Gates*
@@ -3507,4 +3701,5 @@ async def run_pipeline(complaints):
 - *v3.1: Added TL;DR Quick Reference, Scope & Non-Goals, Dependency diagram*
 - *v3.2: Added Open Questions & Risks section (5 questions, 5 risks, 4 deferred decisions)*
 - *v3.3: Added C4 System Context diagram, How to Use This Document navigation guide*
+- *v3.4: Added Sample Outputs & Examples appendix (Pattern, Anomaly, Signal, Alert examples)*
 *Next Step: Principal engineer review and stakeholder sign-off*
