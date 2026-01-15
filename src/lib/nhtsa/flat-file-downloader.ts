@@ -8,9 +8,7 @@ import { createWriteStream, createReadStream, existsSync } from 'fs';
 import { mkdir, rm, stat } from 'fs/promises';
 import path from 'path';
 import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
-import { createGunzip } from 'zlib';
-import { Extract } from 'unzipper';
+import AdmZip from 'adm-zip';
 
 /**
  * NHTSA flat file download URL
@@ -173,11 +171,9 @@ export async function extractFlatFile(
 
   const extractedPath = path.join(destDir, 'FLAT_CMPL.txt');
 
-  // Extract using unzipper
-  await pipeline(
-    createReadStream(zipPath),
-    Extract({ path: destDir })
-  );
+  // Extract using adm-zip
+  const zip = new AdmZip(zipPath);
+  zip.extractAllTo(destDir, true);
 
   // Verify extraction
   if (!existsSync(extractedPath)) {
