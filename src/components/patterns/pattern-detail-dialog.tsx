@@ -215,7 +215,7 @@ export function PatternDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
             {pattern.name}
@@ -226,7 +226,7 @@ export function PatternDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-hidden">
           {/* Summary Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
             <div className="text-center">
@@ -263,11 +263,11 @@ export function PatternDetailDialog({
               <p className="text-sm text-muted-foreground">Year Range</p>
               <p className="font-medium">{pattern.yearStart} - {pattern.yearEnd}</p>
             </div>
-            <div>
+            <div className="overflow-hidden">
               <p className="text-sm text-muted-foreground">Component</p>
-              <div className="flex items-center gap-1">
-                <Wrench className="h-4 w-4 text-muted-foreground" />
-                <Badge variant="outline">{pattern.component}</Badge>
+              <div className="flex items-center gap-1" title={pattern.component}>
+                <Wrench className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm font-medium truncate">{pattern.component}</span>
               </div>
             </div>
           </div>
@@ -292,10 +292,10 @@ export function PatternDetailDialog({
           <Separator />
 
           {/* Description */}
-          <div>
+          <div className="overflow-hidden">
             <p className="text-sm text-muted-foreground mb-2">Pattern Description</p>
             <div className="bg-muted/50 rounded-lg p-4">
-              <p className="text-sm leading-relaxed">{pattern.description}</p>
+              <p className="text-sm leading-relaxed break-words">{pattern.description}</p>
             </div>
           </div>
 
@@ -342,16 +342,16 @@ export function PatternDetailDialog({
                       {complaints.map((complaint) => (
                         <div
                           key={complaint.id}
-                          className="p-3 border rounded-lg bg-background hover:bg-muted/50 transition-colors"
+                          className="p-3 border rounded-lg bg-background hover:bg-muted/50 transition-colors overflow-hidden"
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Car className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium text-sm">
+                          <div className="flex items-center justify-between mb-2 gap-2">
+                            <div className="flex items-center gap-2 min-w-0 flex-shrink">
+                              <Car className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="font-medium text-sm truncate">
                                 {complaint.year} {complaint.make} {complaint.model}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-shrink-0">
                               {complaint.crash && (
                                 <Badge variant="destructive" className="text-xs">Crash</Badge>
                               )}
@@ -373,7 +373,7 @@ export function PatternDetailDialog({
                               )}
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
+                          <p className="text-sm text-muted-foreground line-clamp-2 break-words">
                             {complaint.description}
                           </p>
                         </div>
@@ -473,15 +473,15 @@ export function PatternDetailDialog({
                       {recallMatches.map((match) => (
                         <div
                           key={match.patternRecallId}
-                          className="p-3 border rounded-lg bg-background hover:bg-muted/50 transition-colors"
+                          className="p-3 border rounded-lg bg-background hover:bg-muted/50 transition-colors overflow-hidden"
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium text-sm">
+                          <div className="flex items-center justify-between mb-2 gap-2">
+                            <div className="flex items-center gap-2 min-w-0 flex-shrink">
+                              <ShieldCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="font-medium text-sm truncate">
                                 {match.recall.nhtsaCampaignNumber}
                               </span>
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs truncate max-w-[180px]" title={match.recall.component}>
                                 {match.recall.component}
                               </Badge>
                             </div>
@@ -490,7 +490,7 @@ export function PatternDetailDialog({
                                 <TooltipTrigger asChild>
                                   <Badge
                                     className={cn(
-                                      'text-xs',
+                                      'text-xs flex-shrink-0',
                                       match.matchScore >= 0.7
                                         ? 'bg-success'
                                         : match.matchScore >= 0.4
@@ -507,10 +507,10 @@ export function PatternDetailDialog({
                               </Tooltip>
                             </TooltipProvider>
                           </div>
-                          <div className="text-xs text-muted-foreground mb-1">
+                          <div className="text-xs text-muted-foreground mb-1 truncate">
                             {match.recall.year} {match.recall.make} {match.recall.model} • {match.recall.manufacturer}
                           </div>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
+                          <p className="text-sm text-muted-foreground line-clamp-2 break-words">
                             {match.recall.summary}
                           </p>
                         </div>
