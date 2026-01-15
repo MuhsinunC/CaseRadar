@@ -2,12 +2,23 @@
  * Bulk Import Service
  * Handles importing large numbers of complaints from NHTSA flat file
  * Uses streaming and batching for memory efficiency
+ *
+ * Auto-triggers when database has < 100,000 complaints
  */
 
 import { Readable } from 'stream';
 import { prisma } from '@/lib/db';
 import { parseFlatFileStream, mapFlatFileToComplaint, FlatFileRecord } from './flat-file-parser';
 import { TransformedComplaint } from './types';
+import { downloadAndExtract, getFlatFileStream } from './flat-file-downloader';
+import path from 'path';
+import os from 'os';
+import { rm } from 'fs/promises';
+
+/**
+ * Minimum complaint threshold - if below this, trigger bulk import
+ */
+const MIN_COMPLAINT_THRESHOLD = 100000;
 
 /**
  * Import progress information
@@ -296,6 +307,150 @@ export class BulkImportService {
    */
   cancel(): void {
     this.cancelled = true;
+  }
+}
+
+/**
+ * Check if bulk import is needed based on complaint count
+ * @returns true if complaint count is below threshold
+ */
+export async function isBulkImportNeeded(): Promise<boolean> {
+  try {
+    const count = await prisma.complaint.count();
+    console.log(`[BulkImport] Current complaint count: ${count.toLocaleString()}`);
+    return count < MIN_COMPLAINT_THRESHOLD;
+  } catch (error) {
+    console.error('[BulkImport] Error checking complaint count:', error);
+    return false;
+  }
+}
+
+/**
+ * Global state for tracking import status
+ */
+let isImportRunning = false;
+let currentImportProgress: ImportProgress | null = null;
+let currentImportResult: ImportResult | null = null;
+
+/**
+ * Get current import status
+ */
+export function getImportStatus(): {
+  isRunning: boolean;
+  progress: ImportProgress | null;
+  result: ImportResult | null;
+} {
+  return {
+    isRunning: isImportRunning,
+    progress: currentImportProgress,
+    result: currentImportResult,
+  };
+}
+
+/**
+ * Run bulk import automatically if needed
+ * This should be called on app startup or from cron jobs
+ */
+export async function runBulkImportIfNeeded(): Promise<ImportResult | null> {
+  // Check if already running
+  if (isImportRunning) {
+    console.log('[BulkImport] Import already in progress, skipping');
+    return null;
+  }
+
+  // Check if import is needed
+  const needed = await isBulkImportNeeded();
+  if (!needed) {
+    console.log('[BulkImport] Database has sufficient complaints, skipping bulk import');
+    return null;
+  }
+
+  console.log('[BulkImport] Database under-populated, starting automatic bulk import...');
+  return runBulkImport();
+}
+
+/**
+ * Run the bulk import process
+ */
+export async function runBulkImport(): Promise<ImportResult> {
+  if (isImportRunning) {
+    throw new Error('Import already in progress');
+  }
+
+  isImportRunning = true;
+  currentImportResult = null;
+  const workDir = path.join(os.tmpdir(), 'nhtsa-bulk-import');
+
+  try {
+    const service = new BulkImportService();
+
+    // Download and extract flat file
+    console.log('[BulkImport] Downloading NHTSA flat file...');
+    const flatFilePath = await downloadAndExtract(workDir, {
+      onProgress: (progress) => {
+        if (progress.percentage % 10 === 0) {
+          console.log(`[BulkImport] Download progress: ${progress.percentage}%`);
+        }
+      },
+    });
+
+    console.log('[BulkImport] Starting import from flat file...');
+    const stream = getFlatFileStream(flatFilePath);
+
+    const result = await service.importFromStream(stream, {
+      onProgress: (progress) => {
+        currentImportProgress = progress;
+        // Log every 100,000 records
+        if (progress.recordsProcessed % 100000 === 0) {
+          console.log(
+            `[BulkImport] Progress: ${progress.recordsProcessed.toLocaleString()} records ` +
+            `(${progress.percentComplete}%) - ${progress.recordsPerSecond} rec/sec`
+          );
+        }
+      },
+    });
+
+    currentImportResult = result;
+
+    console.log('[BulkImport] Import complete:', {
+      recordsProcessed: result.recordsProcessed.toLocaleString(),
+      recordsInserted: result.recordsInserted.toLocaleString(),
+      recordsSkipped: result.recordsSkipped.toLocaleString(),
+      recordsErrored: result.recordsErrored.toLocaleString(),
+      durationMs: result.durationMs,
+    });
+
+    // Cleanup
+    try {
+      await rm(workDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[BulkImport] Import failed:', error);
+    const errorResult: ImportResult = {
+      success: false,
+      recordsProcessed: currentImportProgress?.recordsProcessed || 0,
+      recordsInserted: currentImportProgress?.recordsInserted || 0,
+      recordsSkipped: currentImportProgress?.recordsSkipped || 0,
+      recordsErrored: currentImportProgress?.recordsErrored || 0,
+      durationMs: currentImportProgress?.elapsedMs || 0,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+    currentImportResult = errorResult;
+
+    // Cleanup on error
+    try {
+      await rm(workDir, { recursive: true, force: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    throw error;
+  } finally {
+    isImportRunning = false;
   }
 }
 

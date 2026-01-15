@@ -55,12 +55,13 @@ interface ImportResult {
  * Status response from API
  */
 interface StatusResponse {
-  status: 'idle' | 'downloading' | 'extracting' | 'importing' | 'complete' | 'cancelled' | 'error';
+  status: 'idle' | 'running' | 'downloading' | 'extracting' | 'importing' | 'complete' | 'cancelled' | 'error';
   progress?: ImportProgress;
   result?: ImportResult;
   startedAt?: string;
   error?: string;
   message?: string;
+  importNeeded?: boolean;
 }
 
 /**
@@ -93,6 +94,7 @@ function formatDuration(ms: number): string {
 function StatusBadge({ status }: { status: StatusResponse['status'] }) {
   const variants = {
     idle: { label: 'Idle', variant: 'outline' as const, icon: Database },
+    running: { label: 'Running', variant: 'default' as const, icon: Loader2 },
     downloading: { label: 'Downloading', variant: 'secondary' as const, icon: Download },
     extracting: { label: 'Extracting', variant: 'secondary' as const, icon: RefreshCw },
     importing: { label: 'Importing', variant: 'default' as const, icon: Loader2 },
@@ -103,7 +105,7 @@ function StatusBadge({ status }: { status: StatusResponse['status'] }) {
 
   const config = variants[status];
   const Icon = config.icon;
-  const isAnimating = ['downloading', 'extracting', 'importing'].includes(status);
+  const isAnimating = ['downloading', 'extracting', 'importing', 'running'].includes(status);
 
   return (
     <Badge variant={config.variant} data-testid="status-badge" className="flex items-center gap-1">
@@ -279,10 +281,29 @@ export function SyncDashboard() {
     return () => clearInterval(interval);
   }, [fetchStatus, status?.status]);
 
-  const isImportActive = status && ['downloading', 'extracting', 'importing'].includes(status.status);
+  const isImportActive = status && ['downloading', 'extracting', 'importing', 'running'].includes(status.status);
 
   return (
     <div className="space-y-6" data-testid="sync-dashboard">
+      {/* Auto-import notification */}
+      {status?.importNeeded && status.status === 'idle' && (
+        <Card className="border-warning bg-warning/5">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-warning mt-0.5" />
+              <div>
+                <p className="font-medium">Database needs population</p>
+                <p className="text-sm text-muted-foreground">
+                  Your database has fewer than 100,000 complaints. The bulk import will
+                  trigger automatically on the next scheduled sync (runs every 6 hours),
+                  or you can start it manually below.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header */}
       <Card>
         <CardHeader>
@@ -293,7 +314,7 @@ export function SyncDashboard() {
                 NHTSA Data Sync
               </CardTitle>
               <CardDescription>
-                Import all 2.1M+ historical NHTSA complaints
+                Automatically imports 2.1M+ historical NHTSA complaints when database is under-populated
               </CardDescription>
             </div>
             {status && <StatusBadge status={status.status} />}
@@ -301,43 +322,37 @@ export function SyncDashboard() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4">
-            <Button
-              onClick={startImport}
-              disabled={isLoading || isStarting || isImportActive}
-              data-testid="start-import-btn"
-            >
-              {isStarting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Starting...
-                </>
-              ) : (
-                <>
-                  <Download className="mr-2 h-4 w-4" />
-                  Start Full Import
-                </>
-              )}
-            </Button>
-
-            {isImportActive && (
+            {status?.importNeeded && (
               <Button
-                variant="destructive"
-                onClick={cancelImport}
-                disabled={isCancelling}
-                data-testid="cancel-import-btn"
+                onClick={startImport}
+                disabled={isLoading || isStarting || isImportActive}
+                data-testid="start-import-btn"
               >
-                {isCancelling ? (
+                {isStarting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Cancelling...
+                    Starting...
                   </>
                 ) : (
                   <>
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Cancel Import
+                    <Download className="mr-2 h-4 w-4" />
+                    Start Import Now
                   </>
                 )}
               </Button>
+            )}
+
+            {!status?.importNeeded && status?.status === 'idle' && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                Database has sufficient data. No import needed.
+              </div>
+            )}
+
+            {isImportActive && (
+              <div className="text-sm text-muted-foreground">
+                Import in progress. This may take 1-3 hours.
+              </div>
             )}
 
             <Button
@@ -395,14 +410,16 @@ export function SyncDashboard() {
       {/* Info */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">About Full Sync</CardTitle>
+          <CardTitle className="text-sm">How Auto-Sync Works</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="text-sm text-muted-foreground space-y-1">
-            <li>Downloads the complete NHTSA flat file (~1.5GB compressed)</li>
-            <li>Contains 2.1M+ historical complaints since 1995</li>
-            <li>Skips existing records to avoid duplicates</li>
-            <li>Estimated time: 1-3 hours depending on connection speed</li>
+            <li><strong>Automatic trigger:</strong> When database has &lt; 100,000 complaints, bulk import runs automatically</li>
+            <li><strong>Scheduled sync:</strong> Runs every 6 hours via cron job</li>
+            <li><strong>Source:</strong> Downloads complete NHTSA flat file (~1.5GB compressed)</li>
+            <li><strong>Contents:</strong> 2.1M+ historical complaints since 1995</li>
+            <li><strong>Duplicates:</strong> Existing records are skipped automatically</li>
+            <li><strong>Duration:</strong> Full import takes 1-3 hours depending on connection speed</li>
           </ul>
         </CardContent>
       </Card>

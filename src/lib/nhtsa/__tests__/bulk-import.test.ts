@@ -12,6 +12,8 @@ import {
   ImportProgress,
   ImportOptions,
   ImportResult,
+  isBulkImportNeeded,
+  getImportStatus,
 } from '../bulk-import';
 
 // Mock the database
@@ -199,6 +201,56 @@ describe('BulkImportService', () => {
       });
 
       expect(result.success).toBe(true);
+    });
+  });
+});
+
+describe('Auto-import helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('isBulkImportNeeded', () => {
+    it('should return true when complaint count is below threshold', async () => {
+      const { prisma } = await import('@/lib/db');
+      (prisma.complaint.count as ReturnType<typeof vi.fn>).mockResolvedValue(17000);
+
+      const needed = await isBulkImportNeeded();
+      expect(needed).toBe(true);
+    });
+
+    it('should return false when complaint count is above threshold', async () => {
+      const { prisma } = await import('@/lib/db');
+      (prisma.complaint.count as ReturnType<typeof vi.fn>).mockResolvedValue(150000);
+
+      const needed = await isBulkImportNeeded();
+      expect(needed).toBe(false);
+    });
+
+    it('should return false on database error', async () => {
+      const { prisma } = await import('@/lib/db');
+      (prisma.complaint.count as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Database error')
+      );
+
+      const needed = await isBulkImportNeeded();
+      expect(needed).toBe(false);
+    });
+  });
+
+  describe('getImportStatus', () => {
+    it('should return idle status when no import is running', () => {
+      const status = getImportStatus();
+
+      expect(status.isRunning).toBe(false);
+    });
+
+    it('should include progress and result fields', () => {
+      const status = getImportStatus();
+
+      expect(status).toHaveProperty('isRunning');
+      expect(status).toHaveProperty('progress');
+      expect(status).toHaveProperty('result');
     });
   });
 });

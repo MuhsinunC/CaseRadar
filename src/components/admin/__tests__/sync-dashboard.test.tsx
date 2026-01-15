@@ -21,7 +21,7 @@ describe('SyncDashboard', () => {
     it('should render the dashboard', async () => {
       server.use(
         http.get('/api/nhtsa/bulk-import', () => {
-          return HttpResponse.json({ status: 'idle', message: 'No import in progress' });
+          return HttpResponse.json({ status: 'idle', message: 'No import in progress', importNeeded: true });
         })
       );
 
@@ -35,7 +35,7 @@ describe('SyncDashboard', () => {
     it('should show idle status when no import is running', async () => {
       server.use(
         http.get('/api/nhtsa/bulk-import', () => {
-          return HttpResponse.json({ status: 'idle', message: 'No import in progress' });
+          return HttpResponse.json({ status: 'idle', message: 'No import in progress', importNeeded: true });
         })
       );
 
@@ -46,10 +46,10 @@ describe('SyncDashboard', () => {
       });
     });
 
-    it('should display the start import button', async () => {
+    it('should display the start import button when import is needed', async () => {
       server.use(
         http.get('/api/nhtsa/bulk-import', () => {
-          return HttpResponse.json({ status: 'idle' });
+          return HttpResponse.json({ status: 'idle', importNeeded: true });
         })
       );
 
@@ -57,6 +57,35 @@ describe('SyncDashboard', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('start-import-btn')).toBeInTheDocument();
+      });
+    });
+
+    it('should not display the start button when import is not needed', async () => {
+      server.use(
+        http.get('/api/nhtsa/bulk-import', () => {
+          return HttpResponse.json({ status: 'idle', importNeeded: false });
+        })
+      );
+
+      render(<SyncDashboard />);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('start-import-btn')).not.toBeInTheDocument();
+        expect(screen.getByText(/sufficient data/i)).toBeInTheDocument();
+      });
+    });
+
+    it('should show warning notification when database needs population', async () => {
+      server.use(
+        http.get('/api/nhtsa/bulk-import', () => {
+          return HttpResponse.json({ status: 'idle', importNeeded: true });
+        })
+      );
+
+      render(<SyncDashboard />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Database needs population/i)).toBeInTheDocument();
       });
     });
   });
@@ -67,11 +96,11 @@ describe('SyncDashboard', () => {
 
       server.use(
         http.get('/api/nhtsa/bulk-import', () => {
-          return HttpResponse.json({ status: 'idle' });
+          return HttpResponse.json({ status: 'idle', importNeeded: true });
         }),
         http.post('/api/nhtsa/bulk-import', () => {
           postCalled = true;
-          return HttpResponse.json({ success: true, status: 'downloading' });
+          return HttpResponse.json({ success: true, status: 'running' });
         })
       );
 
@@ -120,7 +149,7 @@ describe('SyncDashboard', () => {
       });
     });
 
-    it('should show cancel button during import', async () => {
+    it('should show in-progress message during import', async () => {
       server.use(
         http.get('/api/nhtsa/bulk-import', () => {
           return HttpResponse.json({
@@ -144,7 +173,7 @@ describe('SyncDashboard', () => {
       render(<SyncDashboard />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('cancel-import-btn')).toBeInTheDocument();
+        expect(screen.getByText(/Import in progress/i)).toBeInTheDocument();
       });
     });
   });
@@ -223,7 +252,7 @@ describe('SyncDashboard', () => {
     it('should have a refresh button', async () => {
       server.use(
         http.get('/api/nhtsa/bulk-import', () => {
-          return HttpResponse.json({ status: 'idle' });
+          return HttpResponse.json({ status: 'idle', importNeeded: true });
         })
       );
 

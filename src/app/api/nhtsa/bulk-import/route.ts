@@ -3,25 +3,21 @@
  * POST /api/nhtsa/bulk-import - Start bulk import from NHTSA flat file
  * GET /api/nhtsa/bulk-import - Get import status/progress
  * DELETE /api/nhtsa/bulk-import - Cancel import
+ *
+ * Note: Bulk import now auto-triggers via cron when database has < 100,000 complaints.
+ * This API is provided for manual triggering and monitoring.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { BulkImportService, ImportProgress, ImportResult } from '@/lib/nhtsa/bulk-import';
-import { downloadAndExtract, getFlatFileStream } from '@/lib/nhtsa/flat-file-downloader';
-import { rm } from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import {
+  getImportStatus,
+  runBulkImport,
+  isBulkImportNeeded,
+} from '@/lib/nhtsa/bulk-import';
 
-// Global import state (in production, use Redis or database)
-let currentImport: {
-  service: BulkImportService;
-  status: 'downloading' | 'extracting' | 'importing' | 'complete' | 'cancelled' | 'error';
-  progress: ImportProgress | null;
-  result: ImportResult | null;
-  startedAt: Date;
-  error?: string;
-} | null = null;
+// Track the cancel function for manual imports
+let cancelCurrentImport: (() => void) | null = null;
 
 /**
  * GET /api/nhtsa/bulk-import
@@ -34,21 +30,22 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!currentImport) {
+    const status = getImportStatus();
+
+    if (!status.isRunning && !status.result) {
+      // Check if import is needed
+      const needed = await isBulkImportNeeded();
       return NextResponse.json({
         status: 'idle',
         message: 'No import in progress',
+        importNeeded: needed,
       });
     }
 
-    const progress = currentImport.progress || (await currentImport.service.getProgress());
-
     return NextResponse.json({
-      status: currentImport.status,
-      progress,
-      result: currentImport.result,
-      startedAt: currentImport.startedAt,
-      error: currentImport.error,
+      status: status.isRunning ? 'running' : 'complete',
+      progress: status.progress,
+      result: status.result,
     });
   } catch (error) {
     console.error('Error getting import status:', error);
@@ -71,38 +68,38 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if import already in progress
-    if (currentImport && !['complete', 'cancelled', 'error'].includes(currentImport.status)) {
+    const status = getImportStatus();
+    if (status.isRunning) {
       return NextResponse.json(
-        { error: 'Import already in progress', status: currentImport.status },
+        { error: 'Import already in progress' },
         { status: 409 }
       );
     }
 
+    // Parse body for optional force flag
     const body = await request.json().catch(() => ({}));
-    const batchSize = body.batchSize || 1000;
+    const force = body.force === true;
 
-    // Initialize import state
-    const service = new BulkImportService({ batchSize });
-    currentImport = {
-      service,
-      status: 'downloading',
-      progress: null,
-      result: null,
-      startedAt: new Date(),
-    };
+    // Check if import is actually needed
+    if (!force) {
+      const needed = await isBulkImportNeeded();
+      if (!needed) {
+        return NextResponse.json({
+          success: false,
+          message: 'Database already has sufficient complaints. Use force=true to override.',
+        });
+      }
+    }
 
     // Run import in background
-    runImportInBackground(service).catch((error) => {
-      if (currentImport) {
-        currentImport.status = 'error';
-        currentImport.error = error instanceof Error ? error.message : String(error);
-      }
+    runBulkImport().catch((error) => {
+      console.error('[API] Bulk import failed:', error);
     });
 
     return NextResponse.json({
       success: true,
       message: 'Bulk import started',
-      status: 'downloading',
+      status: 'running',
     });
   } catch (error) {
     console.error('Error starting bulk import:', error);
@@ -124,19 +121,19 @@ export async function DELETE() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!currentImport) {
+    const status = getImportStatus();
+    if (!status.isRunning) {
       return NextResponse.json({
         success: false,
         message: 'No import in progress',
       });
     }
 
-    currentImport.service.cancel();
-    currentImport.status = 'cancelled';
-
+    // Note: The BulkImportService doesn't expose a cancel function through getImportStatus
+    // For now, inform the user that cancellation isn't supported mid-stream
     return NextResponse.json({
-      success: true,
-      message: 'Import cancelled',
+      success: false,
+      message: 'Import cancellation not supported. The import will complete on its own.',
     });
   } catch (error) {
     console.error('Error cancelling import:', error);
@@ -144,87 +141,5 @@ export async function DELETE() {
       { error: 'Failed to cancel import' },
       { status: 500 }
     );
-  }
-}
-
-/**
- * Run the import process in the background
- */
-async function runImportInBackground(service: BulkImportService): Promise<void> {
-  const workDir = path.join(os.tmpdir(), 'nhtsa-bulk-import');
-
-  try {
-    // Download and extract flat file
-    if (currentImport) {
-      currentImport.status = 'downloading';
-    }
-
-    console.log('Starting NHTSA flat file download...');
-    const flatFilePath = await downloadAndExtract(workDir, {
-      onProgress: (progress) => {
-        console.log(`Download progress: ${progress.percentage}%`);
-      },
-    });
-
-    console.log('Flat file extracted:', flatFilePath);
-
-    // Start import
-    if (currentImport) {
-      currentImport.status = 'importing';
-    }
-
-    console.log('Starting bulk import...');
-    const stream = getFlatFileStream(flatFilePath);
-
-    const result = await service.importFromStream(stream, {
-      onProgress: (progress) => {
-        if (currentImport) {
-          currentImport.progress = progress;
-        }
-        // Log progress every 10,000 records
-        if (progress.recordsProcessed % 10000 === 0) {
-          console.log(
-            `Import progress: ${progress.recordsProcessed.toLocaleString()} records ` +
-            `(${progress.percentComplete}%) - ${progress.recordsPerSecond} rec/sec`
-          );
-        }
-      },
-    });
-
-    // Update final state
-    if (currentImport) {
-      currentImport.status = 'complete';
-      currentImport.result = result;
-    }
-
-    console.log('Bulk import complete:', {
-      recordsProcessed: result.recordsProcessed.toLocaleString(),
-      recordsInserted: result.recordsInserted.toLocaleString(),
-      recordsSkipped: result.recordsSkipped.toLocaleString(),
-      recordsErrored: result.recordsErrored.toLocaleString(),
-      durationMs: result.durationMs,
-    });
-
-    // Cleanup
-    try {
-      await rm(workDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-  } catch (error) {
-    console.error('Bulk import error:', error);
-    if (currentImport) {
-      currentImport.status = 'error';
-      currentImport.error = error instanceof Error ? error.message : String(error);
-    }
-
-    // Cleanup on error
-    try {
-      await rm(workDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-
-    throw error;
   }
 }

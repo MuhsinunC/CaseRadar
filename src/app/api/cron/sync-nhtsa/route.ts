@@ -1,6 +1,8 @@
 /**
  * NHTSA Data Sync Cron Job
  * Runs every 6 hours to fetch new complaints from NHTSA API
+ *
+ * Auto-triggers bulk import when database has < 100,000 complaints
  */
 
 import { NextResponse } from 'next/server';
@@ -22,10 +24,37 @@ export async function GET(request: Request) {
   try {
     const startTime = Date.now();
 
-    // Import sync service dynamically to avoid loading at build time
+    // Import services dynamically to avoid loading at build time
     const { nhtsaSyncService } = await import('@/lib/nhtsa');
+    const { runBulkImportIfNeeded } = await import('@/lib/nhtsa/bulk-import');
 
-    // Sync new complaints
+    // First, check if bulk import is needed (database under-populated)
+    // This will automatically trigger if complaint count < 100,000
+    const bulkImportResult = await runBulkImportIfNeeded();
+
+    if (bulkImportResult) {
+      // Bulk import was triggered and completed
+      const duration = Date.now() - startTime;
+
+      console.log(`[CRON] Bulk import completed in ${duration}ms`, {
+        recordsProcessed: bulkImportResult.recordsProcessed,
+        recordsInserted: bulkImportResult.recordsInserted,
+        recordsSkipped: bulkImportResult.recordsSkipped,
+        recordsErrored: bulkImportResult.recordsErrored,
+      });
+
+      return NextResponse.json({
+        success: true,
+        duration,
+        bulkImport: true,
+        recordsProcessed: bulkImportResult.recordsProcessed,
+        recordsInserted: bulkImportResult.recordsInserted,
+        recordsSkipped: bulkImportResult.recordsSkipped,
+        recordsErrored: bulkImportResult.recordsErrored,
+      });
+    }
+
+    // Normal incremental sync (database already has sufficient data)
     const result = await nhtsaSyncService.syncNewComplaints();
 
     const duration = Date.now() - startTime;
@@ -39,6 +68,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       duration,
+      bulkImport: false,
       totalComplaints: result.totalComplaints,
       newComplaints: result.newComplaints,
       errors: result.errors.length,
