@@ -961,12 +961,12 @@ describe('Pipeline E2E', () => {
 To iterate on this implementation, run:
 
 ```bash
-claude "/ralph-loop --completion-promise UNIFIED_DATA_PIPELINE_COMPLETE --prompt-file docs/architecture/unified-data-pipeline-plan.md"
+claude "/ralph-loop --completion-promise UNIFIED_DATA_PIPELINE_COMPLETE --prompt-file .claude/data-pipeline-loop.md"
 ```
 
-### Ralph Loop Prompt File Content
+### Ralph Loop Prompt File
 
-Create `.claude/data-pipeline-loop.md`:
+The prompt file `.claude/data-pipeline-loop.md` has been created with the following content:
 
 ```markdown
 ---

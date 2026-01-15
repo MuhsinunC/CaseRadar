@@ -636,12 +636,12 @@ describe('ScalableEmbeddingClient', () => {
 To iterate on this implementation, run:
 
 ```bash
-claude "/ralph-loop --completion-promise SCALABLE_EMBEDDING_SERVICE_COMPLETE --prompt-file docs/architecture/scalable-embedding-service-plan.md"
+claude "/ralph-loop --completion-promise SCALABLE_EMBEDDING_SERVICE_COMPLETE --prompt-file .claude/embedding-service-loop.md"
 ```
 
-### Ralph Loop Prompt File Content
+### Ralph Loop Prompt File
 
-Create `.claude/embedding-service-loop.md`:
+The prompt file `.claude/embedding-service-loop.md` has been created with the following content:
 
 ```markdown
 ---
