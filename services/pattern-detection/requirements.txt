@@ -1,0 +1,39 @@
+# Pattern Detection Service Dependencies
+# Based on docs/architecture/pattern-detection-system.md
+
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+
+# Topic Modeling (BERTopic + HDBSCAN + UMAP)
+bertopic==0.16.4
+hdbscan==0.8.40
+umap-learn==0.5.7
+scikit-learn==1.6.0
+
+# Anomaly Detection (PyOD)
+pyod==2.0.2
+
+# Change Point Detection (Ruptures)
+ruptures==1.1.9
+
+# Embeddings (sentence-transformers for optional local embeddings)
+sentence-transformers==3.3.1
+
+# Data Processing
+numpy==2.2.1
+pandas==2.2.3
+scipy==1.15.0
+
+# Database
+psycopg2-binary==2.9.10
+sqlalchemy==2.0.36
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.2
+httpx==0.28.1
+
+# Utilities
+python-dotenv==1.0.1

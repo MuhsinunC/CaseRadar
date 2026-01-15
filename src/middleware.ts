@@ -13,6 +13,8 @@ const isPublicRoute = createRouteMatcher([
   '/sign-up(.*)',
   '/api/webhooks(.*)',
   '/api/health',
+  '/api/health/(.*)',
+  '/api/cron/(.*)', // Cron jobs have their own auth via CRON_SECRET
 ]);
 
 // Define routes that require organization selection (reserved for future use)
