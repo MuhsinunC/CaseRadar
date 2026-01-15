@@ -639,7 +639,8 @@ export class PatternGenerationService {
     let rescued = 0;
 
     for (const complaint of severeUnlinked) {
-      // Find patterns for the same vehicle (make+model)
+      // Find patterns for the EXACT same vehicle (make+model)
+      // IMPORTANT: We must NOT fallback to just make - that causes cross-model contamination
       const matchingPatterns = patterns.filter(
         (p) =>
           p.make.toUpperCase() === complaint.make?.toUpperCase() &&
@@ -647,28 +648,12 @@ export class PatternGenerationService {
       );
 
       if (matchingPatterns.length === 0) {
-        // No matching vehicle patterns - try to find by just make
-        const makePatterns = patterns.filter(
-          (p) => p.make.toUpperCase() === complaint.make?.toUpperCase()
-        );
-        if (makePatterns.length > 0) {
-          // Pick the first one (could be improved with component matching)
-          const targetPattern = makePatterns.find(
-            (p) => p.component.toUpperCase() === complaint.component?.toUpperCase()
-          ) || makePatterns[0];
-
-          await prisma.complaint.update({
-            where: { id: complaint.id },
-            data: { clusterId: targetPattern.id },
-          });
-          rescued++;
-          continue;
-        }
-        // No matching patterns at all - skip (will remain as noise)
+        // No matching pattern for this exact vehicle - skip (will remain as noise)
+        // We do NOT fall back to make-only matching to prevent cross-model contamination
         continue;
       }
 
-      // Find pattern with matching component, or use first match
+      // Find pattern with matching component, or use first match for this vehicle
       const targetPattern =
         matchingPatterns.find(
           (p) => p.component.toUpperCase() === complaint.component?.toUpperCase()
