@@ -29,12 +29,13 @@ const PROCESSING_BATCH_SIZE = 50;
 function prepareComplaintText(complaint: {
   make: string;
   model: string;
-  year: number;
+  year: number | null;
   component: string;
   description: string;
 }): string {
+  const yearStr = complaint.year ?? 'Unknown';
   return [
-    `Vehicle: ${complaint.year} ${complaint.make} ${complaint.model}`,
+    `Vehicle: ${yearStr} ${complaint.make} ${complaint.model}`,
     `Component: ${complaint.component}`,
     `Issue: ${complaint.description}`,
   ].join('\n');

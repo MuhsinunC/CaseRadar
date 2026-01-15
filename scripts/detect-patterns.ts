@@ -108,8 +108,8 @@ async function detectPatterns() {
         make: c.make,
         model: c.model || 'Unknown',
         component: c.component,
-        yearStart: c.year,
-        yearEnd: c.year,
+        yearStart: c.year ?? 0,
+        yearEnd: c.year ?? 0,
         complaintCount: 0,
         totalDeaths: 0,
         totalInjuries: 0,
@@ -128,8 +128,10 @@ async function detectPatterns() {
     pattern.crashCount += c.crash ? 1 : 0;
     pattern.fireCount += c.fire ? 1 : 0;
     pattern.complaintIds.push(c.id);
-    pattern.yearStart = Math.min(pattern.yearStart, c.year);
-    pattern.yearEnd = Math.max(pattern.yearEnd, c.year);
+    if (c.year !== null) {
+      pattern.yearStart = Math.min(pattern.yearStart, c.year);
+      pattern.yearEnd = Math.max(pattern.yearEnd, c.year);
+    }
     if (c.dateAdded < pattern.firstSeen) pattern.firstSeen = c.dateAdded;
     if (c.dateAdded > pattern.lastSeen) pattern.lastSeen = c.dateAdded;
   }

@@ -128,7 +128,11 @@ export async function POST(request: NextRequest) {
         severity: pattern.severityScore,
         complaintCount: pattern.complaints.length,
       },
-      complaints: pattern.complaints,
+      // Map complaints to convert null years to undefined (Prisma uses null, interface expects undefined)
+      complaints: pattern.complaints.map(c => ({
+        ...c,
+        year: c.year ?? undefined,
+      })),
       plaintiffInfo: body.plaintiffInfo,
       court: body.court,
       defendant: body.defendant || `${pattern.make} Motor Corporation`,

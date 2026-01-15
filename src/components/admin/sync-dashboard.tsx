@@ -93,14 +93,14 @@ function formatDuration(ms: number): string {
  */
 function StatusBadge({ status }: { status: StatusResponse['status'] }) {
   const variants = {
-    idle: { label: 'Idle', variant: 'outline' as const, icon: Database },
-    running: { label: 'Running', variant: 'default' as const, icon: Loader2 },
-    downloading: { label: 'Downloading', variant: 'secondary' as const, icon: Download },
-    extracting: { label: 'Extracting', variant: 'secondary' as const, icon: RefreshCw },
-    importing: { label: 'Importing', variant: 'default' as const, icon: Loader2 },
-    complete: { label: 'Complete', variant: 'success' as const, icon: CheckCircle2 },
-    cancelled: { label: 'Cancelled', variant: 'warning' as const, icon: XCircle },
-    error: { label: 'Error', variant: 'destructive' as const, icon: AlertTriangle },
+    idle: { label: 'Idle', variant: 'outline' as const, icon: Database, className: '' },
+    running: { label: 'Running', variant: 'default' as const, icon: Loader2, className: '' },
+    downloading: { label: 'Downloading', variant: 'secondary' as const, icon: Download, className: '' },
+    extracting: { label: 'Extracting', variant: 'secondary' as const, icon: RefreshCw, className: '' },
+    importing: { label: 'Importing', variant: 'default' as const, icon: Loader2, className: '' },
+    complete: { label: 'Complete', variant: 'default' as const, icon: CheckCircle2, className: 'bg-green-500 hover:bg-green-600' },
+    cancelled: { label: 'Cancelled', variant: 'secondary' as const, icon: XCircle, className: 'bg-amber-500 hover:bg-amber-600 text-white' },
+    error: { label: 'Error', variant: 'destructive' as const, icon: AlertTriangle, className: '' },
   };
 
   const config = variants[status];
@@ -108,7 +108,7 @@ function StatusBadge({ status }: { status: StatusResponse['status'] }) {
   const isAnimating = ['downloading', 'extracting', 'importing', 'running'].includes(status);
 
   return (
-    <Badge variant={config.variant} data-testid="status-badge" className="flex items-center gap-1">
+    <Badge variant={config.variant} data-testid="status-badge" className={cn("flex items-center gap-1", config.className)}>
       <Icon className={cn('h-3 w-3', isAnimating && 'animate-spin')} />
       {config.label}
     </Badge>
@@ -281,7 +281,7 @@ export function SyncDashboard() {
     return () => clearInterval(interval);
   }, [fetchStatus, status?.status]);
 
-  const isImportActive = status && ['downloading', 'extracting', 'importing', 'running'].includes(status.status);
+  const isImportActive = !!status && ['downloading', 'extracting', 'importing', 'running'].includes(status.status);
 
   return (
     <div className="space-y-6" data-testid="sync-dashboard">

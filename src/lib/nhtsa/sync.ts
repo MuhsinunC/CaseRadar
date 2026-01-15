@@ -453,10 +453,12 @@ export const nhtsaSyncService = {
     return {
       totalComplaints,
       lastSyncDate,
-      complaintsByYear: complaintsByYear.map((r) => ({
-        year: r.year,
-        count: r._count,
-      })),
+      complaintsByYear: complaintsByYear
+        .filter((r): r is typeof r & { year: number } => r.year !== null)
+        .map((r) => ({
+          year: r.year,
+          count: r._count,
+        })),
       topMakes: topMakes.map((r) => ({
         make: r.make,
         count: r._count,

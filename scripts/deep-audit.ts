@@ -134,9 +134,11 @@ async function deepAudit() {
 
   // 9. Check if there are complaints without embeddings
   console.log('\n## 9. Complaints without embeddings');
-  const noEmbedding = await prisma.complaint.count({
-    where: { embedding: null },
-  });
+  // Use raw query for pgvector embedding column (Unsupported type)
+  const noEmbeddingResult = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT COUNT(*) as count FROM "Complaint" WHERE embedding IS NULL
+  `;
+  const noEmbedding = Number(noEmbeddingResult[0].count);
   const totalComplaints = await prisma.complaint.count();
   console.log('Without embedding:', noEmbedding, '/', totalComplaints);
 

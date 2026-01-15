@@ -121,6 +121,9 @@ model Recall {
   // Cross-reference with patterns
   patterns PatternRecall[]
 
+  // Matched leads
+  leads    Lead[]
+
   @@index([make, model, year])
   @@index([component])
   @@index([reportReceivedDate])
@@ -184,6 +187,7 @@ model Pattern {
   complaints          Complaint[]
   generatedComplaints GeneratedComplaint[]
   recalls             PatternRecall[]  // Cross-reference with NHTSA recalls
+  leads               Lead[]           // Generated leads from this pattern
 
   // Clustering audit trail
   clusteringRunId String?
@@ -449,4 +453,106 @@ model DataExportLog {
 
   @@index([userId, createdAt])
   @@index([organizationId])
+}
+
+// ============================================
+// Lead Generation (from Patterns)
+// ============================================
+
+model Lead {
+  id              String    @id @default(cuid())
+
+  // Source pattern
+  patternId       String
+  pattern         Pattern   @relation(fields: [patternId], references: [id], onDelete: Cascade)
+
+  // Lead details
+  title           String
+  description     String    @db.Text
+  make            String
+  model           String?
+  component       String
+  yearStart       Int?
+  yearEnd         Int?
+
+  // Scoring
+  severityScore   Int       @default(0)
+  confidenceScore Float     @default(0)
+  priorityScore   Float     @default(0)
+
+  // Metrics
+  complaintCount  Int       @default(0)
+  deathCount      Int       @default(0)
+  injuryCount     Int       @default(0)
+  crashCount      Int       @default(0)
+  fireCount       Int       @default(0)
+
+  // Status
+  status          LeadStatus @default(NEW)
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  notes           String?   @db.Text
+
+  // Recall matching
+  matchedRecallId String?
+  matchedRecall   Recall?   @relation(fields: [matchedRecallId], references: [id])
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([severityScore])
+  @@index([priorityScore])
+  @@index([make, model])
+  @@index([patternId])
+  @@index([matchedRecallId])
+}
+
+enum LeadStatus {
+  NEW
+  REVIEWING
+  CONFIRMED
+  DISMISSED
+  ESCALATED
+}
+
+// ============================================
+// Pipeline Run Tracking
+// ============================================
+
+model PipelineRun {
+  id              String    @id @default(cuid())
+
+  // Run details
+  mode            String    // 'full' | 'incremental'
+  triggeredBy     String    // 'cron' | 'api' | 'manual'
+
+  // Stage results (JSON objects)
+  ingestResult    Json?
+  embedResult     Json?
+  patternResult   Json?
+  leadResult      Json?
+
+  // Metrics
+  totalRecords    Int       @default(0)
+  totalDuration   Int       @default(0)  // milliseconds
+
+  // Status
+  status          PipelineStatus @default(RUNNING)
+  errorMessage    String?   @db.Text
+
+  // Timestamps
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([status])
+  @@index([startedAt])
+  @@index([triggeredBy])
+}
+
+enum PipelineStatus {
+  RUNNING
+  COMPLETED
+  FAILED
 }

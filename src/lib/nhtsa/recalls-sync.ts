@@ -92,6 +92,11 @@ export const recallsSyncService = {
       let newInserted = 0;
 
       for (const vehicle of uniqueVehicles) {
+        // Skip vehicles without a year - we can't look up recalls without it
+        if (vehicle.year === null) {
+          continue;
+        }
+
         try {
           const recalls = await recallsClient.getTransformedRecallsByVehicle({
             make: vehicle.make,

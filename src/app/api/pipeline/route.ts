@@ -2,17 +2,23 @@
  * Pipeline API
  *
  * GET /api/pipeline - Get pipeline status and statistics
- * POST /api/pipeline - Trigger the full complaint processing pipeline
+ * POST /api/pipeline - Trigger the unified data pipeline
  *
  * The pipeline processes complaints through:
- * 1. Embedding generation
- * 2. Pattern detection
- * 3. Lead scoring
+ * 1. Ingest - Fetch new NHTSA records
+ * 2. Embed - Generate embeddings
+ * 3. Patterns - Detect patterns using ML clustering
+ * 4. Leads - Generate leads from high-severity patterns
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { complaintPipeline, getPipelineProgress } from '@/lib/pipeline/complaint-pipeline';
+import {
+  processPipeline,
+  getPipelineStats,
+  getLastPipelineRun,
+  type PipelineOptions,
+} from '@/lib/pipeline';
 
 /**
  * GET /api/pipeline
@@ -25,11 +31,25 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const stats = await complaintPipeline.getStats();
+    const [stats, lastRun] = await Promise.all([
+      getPipelineStats(),
+      getLastPipelineRun(),
+    ]);
 
     return NextResponse.json({
       success: true,
-      ...stats,
+      stats,
+      lastRun: lastRun ? {
+        id: lastRun.id,
+        mode: lastRun.mode,
+        status: lastRun.status,
+        triggeredBy: lastRun.triggeredBy,
+        startedAt: lastRun.startedAt,
+        completedAt: lastRun.completedAt,
+        totalRecords: lastRun.totalRecords,
+        totalDuration: lastRun.totalDuration,
+        errorMessage: lastRun.errorMessage,
+      } : null,
     });
   } catch (error) {
     console.error('[Pipeline API] Error getting stats:', error);
@@ -42,12 +62,14 @@ export async function GET() {
 
 /**
  * POST /api/pipeline
- * Trigger the full complaint processing pipeline
+ * Trigger the unified data pipeline
  *
  * Body options:
- * - maxEmbeddings: number (default 10000) - Max embeddings to generate per run
- * - skipEmbeddings: boolean - Skip embedding generation
- * - skipPatterns: boolean - Skip pattern generation
+ * - mode: 'full' | 'incremental' (default 'incremental')
+ * - stages: { ingest?: boolean, embed?: boolean, patterns?: boolean, leads?: boolean }
+ * - filters: { since?: string (ISO date), make?: string, highQualityOnly?: boolean }
+ * - dryRun: boolean - Simulate without writing
+ * - continueOnError: boolean - Continue pipeline even if a stage fails
  */
 export async function POST(request: NextRequest) {
   try {
@@ -56,30 +78,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if pipeline is already running
-    const currentProgress = getPipelineProgress();
-    if (currentProgress.stage !== 'idle' && currentProgress.stage !== 'complete' && currentProgress.stage !== 'error') {
-      return NextResponse.json({
-        success: false,
-        error: 'Pipeline is already running',
-        currentProgress,
-      }, { status: 409 });
-    }
-
     const body = await request.json().catch(() => ({}));
 
-    console.log('[Pipeline API] Starting pipeline with options:', body);
+    // Build pipeline options
+    const options: PipelineOptions = {
+      mode: body.mode || 'incremental',
+      triggeredBy: 'api',
+      dryRun: body.dryRun || false,
+      continueOnError: body.continueOnError || false,
+    };
 
-    // Run pipeline (this can take a while)
-    const result = await complaintPipeline.runFullPipeline({
-      maxEmbeddings: body.maxEmbeddings,
-      skipEmbeddings: body.skipEmbeddings,
-      skipPatterns: body.skipPatterns,
-    });
+    // Parse stages if provided
+    if (body.stages) {
+      options.stages = {
+        ingest: body.stages.ingest,
+        embed: body.stages.embed,
+        patterns: body.stages.patterns,
+        leads: body.stages.leads,
+      };
+    }
+
+    // Parse filters if provided
+    if (body.filters) {
+      options.filters = {
+        since: body.filters.since ? new Date(body.filters.since) : undefined,
+        make: body.filters.make,
+        highQualityOnly: body.filters.highQualityOnly,
+      };
+    }
+
+    // Parse execution options
+    if (body.batchSize) {
+      options.batchSize = body.batchSize;
+    }
+
+    console.log('[Pipeline API] Starting pipeline with options:', options);
+
+    // Run pipeline
+    const result = await processPipeline(options);
 
     return NextResponse.json({
       success: result.success,
-      result,
+      runId: result.runId,
+      stages: result.stages,
+      totalDuration: result.totalDuration,
+      recordsProcessed: result.recordsProcessed,
+      errors: result.errors,
     });
   } catch (error) {
     console.error('[Pipeline API] Error running pipeline:', error);
