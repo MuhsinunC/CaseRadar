@@ -50,9 +50,9 @@ All implementations must be **FREE** (no paid APIs). Use:
 - `prisma/schema.prisma`
 
 **Checklist:**
-- [ ] Add `embedding` field to Recall model (vector 768)
-- [ ] Add `semanticMatchScore` field to PatternRecall model
-- [ ] Run migration
+- [x] Add `embedding` field to Recall model (vector 768)
+- [x] Add `semanticMatchScore` field to PatternRecall model (using matchScore)
+- [x] Run migration
 
 **Schema Changes:**
 ```prisma
@@ -73,10 +73,10 @@ model PatternRecall {
 - `src/lib/nhtsa/recalls-sync.ts`
 
 **Checklist:**
-- [ ] Create `getRecallEmbeddingText()` function
-- [ ] Generate embeddings for recall summaries using Ollama
-- [ ] Store embeddings in database
-- [ ] Add backfill function for existing recalls
+- [x] Create `getRecallEmbeddingText()` function
+- [x] Generate embeddings for recall summaries using Ollama
+- [x] Store embeddings in database
+- [x] Add backfill function for existing recalls
 
 **Functions to implement:**
 ```typescript
@@ -90,10 +90,10 @@ async function generateRecallEmbeddings(recallIds?: string[]): Promise<{processe
 - `src/lib/patterns/semantic-matching.ts`
 
 **Checklist:**
-- [ ] Create `computeCosineSimilarity()` function
-- [ ] Create `findSemanticRecallMatches()` function
-- [ ] Create `getPatternCentroidEmbedding()` function
-- [ ] Update cross-reference logic to use semantic matching
+- [x] Create `computeCosineSimilarity()` function
+- [x] Create `findSemanticRecallMatches()` function
+- [x] Create `getPatternCentroidEmbedding()` function
+- [x] Update cross-reference logic to use semantic matching
 
 **Functions to implement:**
 ```typescript
@@ -110,10 +110,10 @@ async function findSemanticRecallMatches(patternId: string, threshold?: number):
 - `src/app/api/recalls/route.ts`
 
 **Checklist:**
-- [ ] Add `semanticMatchScore` to pattern response
-- [ ] Add endpoint to trigger semantic matching
-- [ ] Add `hasSemanticMatch` boolean to pattern list
-- [ ] Add filter for patterns with low semantic match (leads)
+- [x] Add `semanticMatchScore` to pattern response (avgSemanticMatch)
+- [x] Add endpoint to trigger semantic matching (/api/patterns/[id]/semantic-match)
+- [x] Add `hasSemanticMatch` boolean to pattern list
+- [x] Add filter for patterns with low semantic match (leads)
 
 ### 1.5 UI Updates
 
@@ -122,10 +122,10 @@ async function findSemanticRecallMatches(patternId: string, threshold?: number):
 - `src/components/patterns/pattern-detail-dialog.tsx`
 
 **Checklist:**
-- [ ] Show semantic match score on pattern card
-- [ ] Add visual indicator for low match (potential lead)
-- [ ] Show recall match details in dialog
-- [ ] Add tooltip explaining semantic matching
+- [x] Show semantic match score on pattern card (semantic-match-badge)
+- [x] Add visual indicator for low match (potential lead) (No Recall, Hot Lead badges)
+- [x] Show recall match details in dialog (Linked Recalls section)
+- [x] Add tooltip explaining semantic matching
 
 ---
 
@@ -137,10 +137,10 @@ async function findSemanticRecallMatches(patternId: string, threshold?: number):
 - `src/lib/patterns/lead-scoring.ts`
 
 **Checklist:**
-- [ ] Create `calculateLeadScore()` function
-- [ ] Factors: complaint count, severity, low semantic match, trend
-- [ ] Create `rankLeads()` function to sort patterns by lead score
-- [ ] Add lead score to Pattern model (optional caching)
+- [x] Create `calculateLeadScore()` function
+- [x] Factors: complaint count, severity, low semantic match, trend
+- [x] Create `rankLeads()` function to sort patterns by lead score
+- [x] Add lead score to Pattern model (computed on-the-fly, optional caching)
 
 **Lead Score Formula:**
 ```
@@ -156,22 +156,21 @@ leadScore = (complaintCount * 0.3) +
 - `src/app/api/leads/route.ts`
 
 **Checklist:**
-- [ ] GET /api/leads - List patterns ranked by lead score
-- [ ] Support filters: minComplaintCount, minSeverity, maxSemanticMatch
-- [ ] Support pagination
-- [ ] Include lead score breakdown in response
+- [x] GET /api/leads - List patterns ranked by lead score
+- [x] Support filters: minComplaintCount, minSeverity, maxSemanticMatch
+- [x] Support pagination
+- [x] Include lead score breakdown in response
 
 ### 2.3 Leads Dashboard Component
 
 **Files to create:**
-- `src/components/leads/leads-dashboard.tsx`
-- `src/components/leads/lead-card.tsx`
+- `src/app/(dashboard)/leads/page.tsx` (leads dashboard with LeadCard inline)
 
 **Checklist:**
-- [ ] Create leads dashboard with top leads
-- [ ] Show lead score breakdown
-- [ ] Highlight why each pattern is a lead
-- [ ] Add export functionality
+- [x] Create leads dashboard with top leads
+- [x] Show lead score breakdown (expandable with progress bars)
+- [x] Highlight why each pattern is a lead (No Recall, Low Match badges)
+- [x] Add export functionality (CSV and JSON)
 
 ---
 
