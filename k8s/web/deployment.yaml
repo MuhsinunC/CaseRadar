@@ -7,7 +7,7 @@ metadata:
   labels:
     app: caseradar
 spec:
-  replicas: 2
+  replicas: 1  # Single replica for development
   selector:
     matchLabels:
       app: caseradar

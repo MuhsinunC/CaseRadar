@@ -7,7 +7,7 @@ metadata:
     app: embedding-service
     component: ml
 spec:
-  replicas: 2
+  replicas: 1  # Baseline - HPA scales from here
   selector:
     matchLabels:
       app: embedding-service
@@ -29,11 +29,11 @@ spec:
           name: http
         resources:
           requests:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "1Gi"    # Model takes ~900Mi, leave headroom
+            cpu: "200m"      # Low request allows more pods to schedule
           limits:
-            memory: "3Gi"  # Increased for model loading
-            cpu: "2000m"
+            memory: "2Gi"    # Allow for load-induced memory growth
+            cpu: "2000m"     # Can burst to 2 cores under load
         env:
         - name: MODEL_NAME
           value: "nomic-ai/nomic-embed-text-v1.5"
@@ -56,17 +56,17 @@ spec:
             path: /health
             port: 8080
           initialDelaySeconds: 120  # Model download takes time
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
+          periodSeconds: 30         # Check less frequently under load
+          timeoutSeconds: 30        # Allow more time when CPU-bound
+          failureThreshold: 5       # More tolerance before restart
         readinessProbe:
           httpGet:
             path: /health
             port: 8080
           initialDelaySeconds: 60
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
+          periodSeconds: 10
+          timeoutSeconds: 15        # Allow more time when CPU-bound
+          failureThreshold: 5
         startupProbe:
           httpGet:
             path: /health

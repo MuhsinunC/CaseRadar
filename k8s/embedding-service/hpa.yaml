@@ -10,30 +10,34 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: embedding-service
-  # Local development: 1-4 pods (single machine)
-  # Production (GKE/EKS/AKS): change to 2-40 pods
+  # Scaling strategy: maximize CPU utilization up to 90%
+  # HPA will keep adding pods until average pod CPU < 90%
+  # RAM limit: ~8 pods max (8 × 900MB ≈ 7.2GB)
   minReplicas: 1
-  maxReplicas: 4
+  maxReplicas: 8
   metrics:
-  # CPU utilization only - memory isn't useful for ML inference
-  # (model consumes fixed ~1GB RAM regardless of load)
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 60
+        # Scale up when pods exceed 90% CPU (aggressive)
+        # This naturally saturates node CPU
+        averageUtilization: 90
   behavior:
     scaleUp:
-      # React quickly to load
-      stabilizationWindowSeconds: 30
+      # Scale up IMMEDIATELY when overloaded
+      stabilizationWindowSeconds: 0
       policies:
       - type: Pods
-        value: 2  # Add up to 2 pods at once
-        periodSeconds: 30
+        value: 4  # Add up to 4 pods at once
+        periodSeconds: 15
+      - type: Percent
+        value: 100  # Or double the current count
+        periodSeconds: 15
       selectPolicy: Max
     scaleDown:
-      # Conservative scale-down
+      # Scale down slowly (5 min stabilization)
       stabilizationWindowSeconds: 300
       policies:
       - type: Pods
