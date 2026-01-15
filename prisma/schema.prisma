@@ -93,6 +93,60 @@ model Complaint {
 }
 
 // ============================================
+// NHTSA Recalls Data
+// ============================================
+
+model Recall {
+  id                   String   @id @default(cuid())
+  nhtsaCampaignNumber  String   @unique // NHTSA Campaign Number (e.g., "24V123")
+  manufacturer         String
+  make                 String
+  model                String
+  year                 Int
+  component            String
+  summary              String   @db.Text
+  consequence          String   @db.Text
+  remedy               String   @db.Text
+  notes                String?  @db.Text
+  reportReceivedDate   DateTime
+  parkIt               Boolean  @default(false) // "Stop driving" severity
+  parkOutside          Boolean  @default(false) // Fire hazard indicator
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Cross-reference with patterns
+  patterns PatternRecall[]
+
+  @@index([make, model, year])
+  @@index([component])
+  @@index([reportReceivedDate])
+  @@index([nhtsaCampaignNumber])
+}
+
+// ============================================
+// Pattern-Recall Cross Reference
+// ============================================
+
+model PatternRecall {
+  id        String   @id @default(cuid())
+  patternId String
+  pattern   Pattern  @relation(fields: [patternId], references: [id], onDelete: Cascade)
+  recallId  String
+  recall    Recall   @relation(fields: [recallId], references: [id], onDelete: Cascade)
+
+  // Match confidence/relevance
+  matchScore   Float   @default(0) // 0-1 confidence that recall addresses this pattern
+  matchReason  String? // Why this recall was linked (component match, description match, etc.)
+
+  createdAt DateTime @default(now())
+
+  @@unique([patternId, recallId])
+  @@index([patternId])
+  @@index([recallId])
+}
+
+// ============================================
 // Pattern/Cluster Analysis
 // ============================================
 
@@ -126,6 +180,7 @@ model Pattern {
   // Relations
   complaints          Complaint[]
   generatedComplaints GeneratedComplaint[]
+  recalls             PatternRecall[]  // Cross-reference with NHTSA recalls
 
   // Clustering audit trail
   clusteringRunId String?

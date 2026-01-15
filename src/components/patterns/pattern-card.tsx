@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Skull,
   Car,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -39,6 +41,9 @@ interface Pattern {
   crashCount: number;
   createdAt: Date;
   updatedAt: Date;
+  // Recall cross-reference
+  recallCount?: number;
+  hasRecall?: boolean;
 }
 
 interface PatternCardProps {
@@ -62,13 +67,6 @@ function formatSeverity(score: number): string {
     return `${(score / 1000).toFixed(1)}K`;
   }
   return score.toFixed(0);
-}
-
-function getSeverityColor(score: number): string {
-  // Updated thresholds for actual score ranges (hundreds to thousands)
-  if (score >= 1000) return 'bg-destructive text-destructive-foreground';
-  if (score >= 500) return 'bg-warning text-warning-foreground';
-  return 'bg-success text-success-foreground';
 }
 
 function getSeverityClass(score: number): string {
@@ -152,6 +150,29 @@ export function PatternCard({
               <TrendIcon className="h-4 w-4" />
             </span>
           </div>
+          {/* Recall indicator - key for lead generation */}
+          {pattern.hasRecall === false && (
+            <Badge
+              data-testid="no-recall-badge"
+              variant="destructive"
+              className="flex items-center gap-1"
+              title="No related recalls found - potential lead"
+            >
+              <ShieldAlert className="h-3 w-3" />
+              No Recall
+            </Badge>
+          )}
+          {pattern.hasRecall === true && (
+            <Badge
+              data-testid="has-recall-badge"
+              variant="secondary"
+              className="flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+              title={`${pattern.recallCount} related recall(s) found`}
+            >
+              <ShieldCheck className="h-3 w-3" />
+              Recall ({pattern.recallCount})
+            </Badge>
+          )}
         </div>
 
         {/* Statistics */}

@@ -96,17 +96,22 @@ export async function GET(request: NextRequest) {
         take: limit,
         include: {
           _count: {
-            select: { complaints: true },
+            select: {
+              complaints: true,
+              recalls: true, // Count linked recalls
+            },
           },
         },
       }),
       prisma.pattern.count({ where }),
     ]);
 
-    // Map patterns to include complaintCount
+    // Map patterns to include complaintCount and recallCount
     const mappedPatterns = patterns.map((p) => ({
       ...p,
       complaintCount: p._count.complaints,
+      recallCount: p._count.recalls,
+      hasRecall: p._count.recalls > 0,
     }));
 
     // Build hybrid pagination response (supports both cursor and offset)

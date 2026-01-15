@@ -134,3 +134,75 @@ export interface VINDecodeResult {
   bodyClass: string;
   engineInfo: string | null;
 }
+
+// ============================================
+// NHTSA Recalls Types
+// ============================================
+
+/**
+ * Raw recall data from NHTSA API
+ * Based on: GET https://api.nhtsa.gov/recalls/recallsByVehicle
+ */
+export interface NHTSARecallRaw {
+  Manufacturer: string;
+  NHTSACampaignNumber: string;
+  ReportReceivedDate: string;
+  Component: string;
+  Summary: string;
+  Consequence: string;
+  Remedy: string;
+  Notes: string;
+  ModelYear: string;
+  Make: string;
+  Model: string;
+  ParkIt: boolean; // True if vehicle should not be driven
+  ParkOutSide: boolean; // True if vehicle should be parked outside
+}
+
+/**
+ * NHTSA Recalls API response wrapper
+ */
+export interface NHTSARecallsApiResponse {
+  Count: number;
+  Message: string;
+  results: NHTSARecallRaw[];
+}
+
+/**
+ * Transformed recall data ready for database insertion
+ */
+export interface TransformedRecall {
+  nhtsaCampaignNumber: string;
+  manufacturer: string;
+  make: string;
+  model: string;
+  year: number;
+  component: string;
+  summary: string;
+  consequence: string;
+  remedy: string;
+  notes: string | null;
+  reportReceivedDate: Date;
+  parkIt: boolean;
+  parkOutside: boolean;
+}
+
+/**
+ * Parameters for recalls by vehicle endpoint
+ */
+export interface RecallsByVehicleParams {
+  make: string;
+  model: string;
+  modelYear: number;
+}
+
+/**
+ * Recall sync status
+ */
+export interface RecallSyncStatus {
+  lastSyncDate: Date | null;
+  totalRecalls: number;
+  newRecalls: number;
+  errors: string[];
+  inProgress: boolean;
+}

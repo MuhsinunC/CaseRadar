@@ -195,11 +195,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const matchingComplaints = await prisma.complaint.findMany({
         where: {
           make: { equals: pattern.make, mode: 'insensitive' },
-          model: { equals: pattern.model, mode: 'insensitive' },
+          ...(pattern.model && { model: { equals: pattern.model, mode: 'insensitive' } }),
           component: { contains: pattern.component, mode: 'insensitive' },
           year: {
-            gte: pattern.yearStart,
-            lte: pattern.yearEnd,
+            gte: pattern.yearStart ?? undefined,
+            lte: pattern.yearEnd ?? undefined,
           },
         },
         select: {
