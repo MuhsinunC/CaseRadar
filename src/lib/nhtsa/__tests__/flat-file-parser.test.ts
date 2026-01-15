@@ -3,13 +3,14 @@
  * TDD: These tests are written BEFORE the implementation
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Readable } from 'stream';
 
-// Import the parser (will fail until implemented)
+// Import the parser
 import {
   parseFlatFileLine,
   parseFlatFileStream,
+  mapFlatFileToComplaint,
   FlatFileRecord,
   FLAT_FILE_COLUMNS,
 } from '../flat-file-parser';
@@ -17,37 +18,40 @@ import {
 describe('FlatFileParser', () => {
   describe('FLAT_FILE_COLUMNS', () => {
     it('should define all required column indices', () => {
+      // Column indices match the NHTSA FLAT_CMPL.txt format
+      // Note: There is no separate ODINO in the flat file, ODINO maps to MFR_NAME index
       expect(FLAT_FILE_COLUMNS).toBeDefined();
       expect(FLAT_FILE_COLUMNS.CMPLID).toBe(0);
-      expect(FLAT_FILE_COLUMNS.ODINO).toBe(1);
-      expect(FLAT_FILE_COLUMNS.MFR_NAME).toBe(2);
-      expect(FLAT_FILE_COLUMNS.MAKETXT).toBe(3);
-      expect(FLAT_FILE_COLUMNS.MODELTXT).toBe(4);
-      expect(FLAT_FILE_COLUMNS.YEARTXT).toBe(5);
-      expect(FLAT_FILE_COLUMNS.CRASH).toBe(6);
-      expect(FLAT_FILE_COLUMNS.FAILDATE).toBe(7);
-      expect(FLAT_FILE_COLUMNS.FIRE).toBe(8);
-      expect(FLAT_FILE_COLUMNS.INJURED).toBe(9);
-      expect(FLAT_FILE_COLUMNS.DEATHS).toBe(10);
-      expect(FLAT_FILE_COLUMNS.COMPDESC).toBe(11);
-      expect(FLAT_FILE_COLUMNS.CITY).toBe(12);
-      expect(FLAT_FILE_COLUMNS.STATE).toBe(13);
-      expect(FLAT_FILE_COLUMNS.VIN).toBe(14);
-      expect(FLAT_FILE_COLUMNS.DATEA).toBe(15);
-      expect(FLAT_FILE_COLUMNS.LDATE).toBe(16);
+      expect(FLAT_FILE_COLUMNS.MFR_NAME).toBe(1);
+      expect(FLAT_FILE_COLUMNS.MAKETXT).toBe(2);
+      expect(FLAT_FILE_COLUMNS.MODELTXT).toBe(3);
+      expect(FLAT_FILE_COLUMNS.YEARTXT).toBe(4);
+      expect(FLAT_FILE_COLUMNS.CRASH).toBe(5);
+      expect(FLAT_FILE_COLUMNS.FAILDATE).toBe(6);
+      expect(FLAT_FILE_COLUMNS.FIRE).toBe(7);
+      expect(FLAT_FILE_COLUMNS.INJURED).toBe(8);
+      expect(FLAT_FILE_COLUMNS.DEATHS).toBe(9);
+      expect(FLAT_FILE_COLUMNS.COMPDESC).toBe(10);
+      expect(FLAT_FILE_COLUMNS.CITY).toBe(11);
+      expect(FLAT_FILE_COLUMNS.STATE).toBe(12);
+      expect(FLAT_FILE_COLUMNS.VIN).toBe(13);
+      expect(FLAT_FILE_COLUMNS.DATEA).toBe(14);
+      expect(FLAT_FILE_COLUMNS.LDATE).toBe(15);
       expect(FLAT_FILE_COLUMNS.CDESCR).toBe(17);
     });
   });
 
   describe('parseFlatFileLine', () => {
     it('should parse a valid tab-delimited line', () => {
-      // Real sample from NHTSA file
+      // Format: CMPLID, MFR_NAME, MAKETXT, MODELTXT, YEARTXT, CRASH, FAILDATE, FIRE, INJURED, DEATHS,
+      //         COMPDESC, CITY, STATE, VIN, DATEA, LDATE, ???, CDESCR
       const line = '958241\tVolvo Car USA, LLC\tVOLVO\t760\t1987\tN\t\tN\t0\t0\tENGINE AND ENGINE COOLING:COOLING SYSTEM:RADIATOR ASSEMBLY\tEL CAJON\tCA\t\t19950103\t19950103\t\tRADIATOR FAILED @ HIGHWAY SPEED OBSTRUCTING DRIVERS VISION TEMPORARY.';
 
       const result = parseFlatFileLine(line);
 
       expect(result).toBeDefined();
       expect(result?.cmplid).toBe('958241');
+      expect(result?.odino).toBe('958241'); // odino defaults to cmplid
       expect(result?.mfr_name).toBe('Volvo Car USA, LLC');
       expect(result?.maketxt).toBe('VOLVO');
       expect(result?.modeltxt).toBe('760');
@@ -64,6 +68,7 @@ describe('FlatFileParser', () => {
     });
 
     it('should handle line with crash and injuries', () => {
+      // Format: CMPLID, MFR_NAME, MAKETXT, MODELTXT, YEARTXT, CRASH, FAILDATE, FIRE, INJURED, DEATHS...
       const line = '958132\tKia America, Inc.\tKIA\tSEPHIA\t1994\tY\t19941230\tN\t0\t0\tPOWER TRAIN:AUTOMATIC TRANSMISSION\tSAN FRANCISCO\tCA\t\t19950103\t19950103\t\tSHIFTED INTO REVERSE VEHICLE JERKED VIOLENTLY.';
 
       const result = parseFlatFileLine(line);
@@ -94,19 +99,20 @@ describe('FlatFileParser', () => {
     });
 
     it('should handle missing optional fields gracefully', () => {
-      // Line with empty VIN and other optional fields
+      // Line with empty MFR_NAME, FAILDATE, CITY, STATE, VIN
       const line = '958241\t\tVOLVO\t760\t1987\tN\t\tN\t0\t0\tENGINE\t\t\t\t19950103\t19950103\t\tDescription';
 
       const result = parseFlatFileLine(line);
 
       expect(result).toBeDefined();
+      expect(result?.mfr_name).toBe('');
+      expect(result?.faildate).toBe('');
       expect(result?.vin).toBe('');
       expect(result?.city).toBe('');
-      expect(result?.faildate).toBe('');
     });
 
     it('should trim whitespace from all fields', () => {
-      const line = '  958241  \t  Volvo  \t  VOLVO  \t  760  \t1987\tN\t\tN\t0\t0\tENGINE\tCITY\tCA\t\t19950103\t19950103\t\tDescription  ';
+      const line = '  958241  \t  Volvo  \t  VOLVO  \t  760  \t1987\tN\t\tN\t0\t0\tENGINE\tCITY\tCA\t\t19950103\t19950103\t\t  Description  ';
 
       const result = parseFlatFileLine(line);
 
@@ -196,12 +202,9 @@ describe('FlatFileParser', () => {
 
   describe('FlatFileRecord to TransformedComplaint mapping', () => {
     it('should correctly map all fields', () => {
-      // Import the mapper function (will be implemented)
-      const { mapFlatFileToComplaint } = require('../flat-file-parser');
-
       const record: FlatFileRecord = {
         cmplid: '958241',
-        odino: 'ODI12345',
+        odino: '958241', // Same as cmplid in flat file format
         mfr_name: 'Volvo Car USA, LLC',
         maketxt: 'VOLVO',
         modeltxt: '760',
@@ -223,7 +226,7 @@ describe('FlatFileParser', () => {
       const complaint = mapFlatFileToComplaint(record);
 
       expect(complaint.nhtsaId).toBe('958241');
-      expect(complaint.odiNumber).toBe('ODI12345');
+      expect(complaint.odiNumber).toBe('958241'); // odiNumber same as nhtsaId
       expect(complaint.manufacturer).toBe('Volvo Car USA, LLC');
       expect(complaint.make).toBe('VOLVO');
       expect(complaint.model).toBe('760');
@@ -239,11 +242,9 @@ describe('FlatFileParser', () => {
     });
 
     it('should handle invalid year by returning null', () => {
-      const { mapFlatFileToComplaint } = require('../flat-file-parser');
-
       const record: FlatFileRecord = {
         cmplid: '958241',
-        odino: '',
+        odino: '958241',
         mfr_name: 'Tesla',
         maketxt: 'TESLA',
         modeltxt: 'CHARGER',
@@ -269,11 +270,9 @@ describe('FlatFileParser', () => {
     });
 
     it('should handle empty description', () => {
-      const { mapFlatFileToComplaint } = require('../flat-file-parser');
-
       const record: FlatFileRecord = {
         cmplid: '958241',
-        odino: '',
+        odino: '958241',
         mfr_name: 'Ford',
         maketxt: 'FORD',
         modeltxt: 'F150',
