@@ -1,10 +1,10 @@
 /**
  * Admin Page
- * System administration features including NHTSA data sync
+ * System administration features including NHTSA data sync and pattern generation
  */
 
 import { Metadata } from 'next';
-import { SyncDashboard } from '@/components/admin';
+import { SyncDashboard, PipelineDashboard } from '@/components/admin';
 
 export const metadata: Metadata = {
   title: 'Admin | CaseRadar',
@@ -23,7 +23,10 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <SyncDashboard />
+      <div className="space-y-6">
+        <SyncDashboard />
+        <PipelineDashboard />
+      </div>
     </div>
   );
 }

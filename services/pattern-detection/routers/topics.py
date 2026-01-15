@@ -38,6 +38,9 @@ class TopicFitResponse(BaseModel):
     success: bool
     topic_count: int
     topics: List[dict]
+    document_topics: Optional[List[int]] = Field(
+        None, description="Topic assignment for each input document (same order as input)"
+    )
 
 
 class TopicsOverTimeRequest(BaseModel):
@@ -93,7 +96,7 @@ async def fit_topics(request: TopicFitRequest):
             embeddings = np.array(request.embeddings)
 
         # Fit the model
-        results: List[TopicResult] = model.fit(request.documents, embeddings)
+        results, document_topics = model.fit(request.documents, embeddings)
 
         return TopicFitResponse(
             success=True,
@@ -109,6 +112,7 @@ async def fit_topics(request: TopicFitRequest):
                 }
                 for r in results
             ],
+            document_topics=document_topics,
         )
 
     except Exception as e:

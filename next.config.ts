@@ -82,6 +82,26 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+
+  // External packages that should not be bundled (use native require at runtime)
+  // This prevents Turbopack from trying to resolve optional dependencies like AWS SDK
+  serverExternalPackages: ['unzipper'],
+
+  // Empty turbopack config to silence the warning about webpack config
+  turbopack: {},
+
+  // Webpack configuration for handling optional dependencies (fallback for non-Turbopack builds)
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Mark AWS SDK as external - it's an optional dependency of unzipper
+      // that we don't use (we're not loading files from S3)
+      config.externals = config.externals || [];
+      config.externals.push({
+        '@aws-sdk/client-s3': 'commonjs @aws-sdk/client-s3',
+      });
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

@@ -95,6 +95,7 @@ class TopicClusteringModel:
         self._vectorizer_model = None
         self._topic_model = None
         self._is_fitted = False
+        self._document_topics = None  # Store per-document topic assignments
 
     def _create_hdbscan(self) -> HDBSCAN:
         """Create HDBSCAN model with architecture-specified config."""
@@ -166,7 +167,7 @@ class TopicClusteringModel:
         self,
         documents: List[str],
         embeddings: Optional[np.ndarray] = None,
-    ) -> List[TopicResult]:
+    ) -> Tuple[List[TopicResult], List[int]]:
         """
         Fit the topic model on documents.
 
@@ -175,7 +176,7 @@ class TopicClusteringModel:
             embeddings: Pre-computed embeddings (768-dim)
 
         Returns:
-            List of TopicResult objects
+            Tuple of (List of TopicResult objects, List of topic assignments per document)
         """
         n_docs = len(documents)
         logger.info(f"Fitting topic model on {n_docs} documents...")
@@ -217,6 +218,7 @@ class TopicClusteringModel:
                 topics, probs = self._topic_model.fit_transform(documents)
 
         self._is_fitted = True
+        self._document_topics = topics.tolist() if hasattr(topics, 'tolist') else list(topics)
 
         # Extract topic information
         topic_info = self._topic_model.get_topic_info()
@@ -249,7 +251,7 @@ class TopicClusteringModel:
             ))
 
         logger.info(f"Found {len(results)} topics")
-        return results
+        return results, self._document_topics
 
     def topics_over_time(
         self,

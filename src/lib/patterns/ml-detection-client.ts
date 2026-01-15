@@ -22,6 +22,7 @@ export interface TopicFitResponse {
   success: boolean;
   topic_count: number;
   topics: TopicResult[];
+  document_topics?: number[];  // Per-document topic assignments (same order as input)
 }
 
 export interface TopicTrend {
@@ -90,7 +91,7 @@ export interface ComplaintData {
 // Client Configuration
 
 const ML_SERVICE_URL = process.env.PATTERN_DETECTION_URL || 'http://localhost:8000';
-const REQUEST_TIMEOUT = 30000; // 30 seconds
+const REQUEST_TIMEOUT = 300000; // 5 minutes - BERTopic can be slow with large batches
 
 // Helper Functions
 

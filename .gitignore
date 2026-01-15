@@ -57,3 +57,6 @@ next-env.d.ts
 # Local test files
 *.local
 .test-*
+
+# clerk configuration (can include secrets)
+/.clerk/

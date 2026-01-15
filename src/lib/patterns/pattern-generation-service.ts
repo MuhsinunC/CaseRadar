@@ -73,6 +73,41 @@ interface ComplaintMetadata {
   year: number | null;
 }
 
+/**
+ * Prepare complaint text for BERTopic
+ * Uses the same format as embedding generation for consistency
+ * This ensures BERTopic can extract meaningful topics even when description is empty
+ */
+function prepareComplaintTextForBERTopic(complaint: {
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  component: string | null;
+  description: string | null;
+}): string {
+  const parts: string[] = [];
+
+  // Add vehicle info (always present)
+  const vehicleInfo = [complaint.year, complaint.make, complaint.model]
+    .filter(Boolean)
+    .join(' ');
+  if (vehicleInfo) {
+    parts.push(`Vehicle: ${vehicleInfo}`);
+  }
+
+  // Add component (usually present)
+  if (complaint.component) {
+    parts.push(`Component: ${complaint.component}`);
+  }
+
+  // Add description (may be empty for flat file imports)
+  if (complaint.description && complaint.description.trim().length > 0) {
+    parts.push(`Issue: ${complaint.description}`);
+  }
+
+  return parts.join('\n');
+}
+
 export class PatternGenerationService {
   // Minimum complaints needed per vehicle to run clustering
   private static MIN_COMPLAINTS_FOR_CLUSTERING = 10;
@@ -90,8 +125,13 @@ export class PatternGenerationService {
    * 5. Merge duplicate patterns (same make/model/component)
    * 6. Recalculate aggregate severity metrics
    * 7. Calculate trend direction
+   *
+   * @param options.highQualityOnly - Only use complaints with valid descriptions and components
    */
-  async generatePatterns(): Promise<GenerationResult> {
+  async generatePatterns(options?: {
+    highQualityOnly?: boolean;
+  }): Promise<GenerationResult> {
+    const { highQualityOnly = false } = options || {};
     const startTime = Date.now();
     let totalCreated = 0;
     let totalUpdated = 0;
@@ -118,7 +158,10 @@ export class PatternGenerationService {
       }
 
       // Step 2: Fetch complaints with embeddings
-      const allComplaints = await this.fetchComplaintsWithEmbeddings();
+      console.log(
+        `[PatternGeneration] Fetching complaints (highQualityOnly: ${highQualityOnly})`
+      );
+      const allComplaints = await this.fetchComplaintsWithEmbeddings(highQualityOnly);
 
       if (allComplaints.length === 0) {
         return {
@@ -152,7 +195,8 @@ export class PatternGenerationService {
         console.log(`[PatternGeneration] Processing ${vehicleKey} with ${complaints.length} complaints`);
 
         // Prepare data for ML service
-        const documents = complaints.map((c) => c.description || '');
+        // Use same text format as embedding generation for consistency
+        const documents = complaints.map((c) => prepareComplaintTextForBERTopic(c));
         const embeddings = complaints.map((c) => this.parseEmbedding(c.embedding));
 
         // Call ML service for topic clustering on this vehicle's complaints
@@ -163,11 +207,12 @@ export class PatternGenerationService {
           continue;
         }
 
-        // Create patterns from topics (with vehicle-specific metadata already known)
+        // Create patterns from topics using actual per-document assignments
         const result = await this.createPatternsFromTopicsForVehicle(
           topicResult.topics,
           complaints,
-          vehicleKey
+          vehicleKey,
+          topicResult.document_topics  // Pass the actual topic assignments
         );
 
         totalCreated += result.created;
@@ -247,8 +292,16 @@ export class PatternGenerationService {
 
   /**
    * Fetch complaints with embeddings from database using raw SQL (pgvector)
+   * @param highQualityOnly - If true, only fetch complaints with valid descriptions and components
    */
-  private async fetchComplaintsWithEmbeddings(): Promise<ComplaintWithEmbedding[]> {
+  private async fetchComplaintsWithEmbeddings(
+    highQualityOnly: boolean = false
+  ): Promise<ComplaintWithEmbedding[]> {
+    // Build quality filter if needed
+    const qualityFilter = highQualityOnly
+      ? `AND component NOT IN ('0', '1', '') AND description != ''`
+      : '';
+
     const complaints = await prisma.$queryRawUnsafe<ComplaintWithEmbedding[]>(`
       SELECT
         id,
@@ -265,6 +318,7 @@ export class PatternGenerationService {
         embedding::text as embedding
       FROM "Complaint"
       WHERE embedding IS NOT NULL
+      ${qualityFilter}
       ORDER BY "dateAdded" DESC
       LIMIT 50000
     `);
@@ -376,7 +430,8 @@ export class PatternGenerationService {
   private async createPatternsFromTopicsForVehicle(
     topics: TopicResult[],
     complaints: ComplaintWithEmbedding[],
-    vehicleKey: string
+    vehicleKey: string,
+    documentTopics?: number[]  // Actual per-document topic assignments from ML service
   ): Promise<{ created: number; updated: number; noiseCount: number }> {
     let created = 0;
     let updated = 0;
@@ -385,13 +440,47 @@ export class PatternGenerationService {
     // Parse vehicle key (format: "MAKE|MODEL")
     const [make, model] = vehicleKey.split('|');
 
-    // Build a map of topic_id -> complaints based on topic counts
-    const topicComplaintsMap = this.distributeComplaintsToTopics(topics, complaints);
+    // Build a map of topic_id -> complaints
+    // IMPORTANT: Use actual per-document assignments if available, otherwise fallback to sequential distribution
+    let topicComplaintsMap: Map<number, ComplaintWithEmbedding[]>;
+
+    if (documentTopics && documentTopics.length === complaints.length) {
+      // Use actual per-document topic assignments from BERTopic
+      topicComplaintsMap = new Map<number, ComplaintWithEmbedding[]>();
+
+      // Initialize map for all topics
+      for (const topic of topics) {
+        topicComplaintsMap.set(topic.topic_id, []);
+      }
+      // Also initialize for noise (-1)
+      topicComplaintsMap.set(-1, []);
+
+      // Assign complaints to their actual topics
+      for (let i = 0; i < complaints.length; i++) {
+        const topicId = documentTopics[i];
+        if (!topicComplaintsMap.has(topicId)) {
+          topicComplaintsMap.set(topicId, []);
+        }
+        topicComplaintsMap.get(topicId)!.push(complaints[i]);
+      }
+
+      console.log(`[PatternGeneration] Using actual per-document topic assignments for ${vehicleKey}`);
+    } else {
+      // Fallback to sequential distribution (legacy behavior)
+      console.warn(`[PatternGeneration] document_topics not available for ${vehicleKey}, using sequential fallback`);
+      topicComplaintsMap = this.distributeComplaintsToTopics(topics, complaints);
+    }
+
+    // Count noise from actual assignments if available
+    const noiseComplaints = topicComplaintsMap.get(-1);
+    if (noiseComplaints) {
+      noiseCount = noiseComplaints.length;
+    }
 
     for (const topic of topics) {
       // Skip noise topic (topic_id: -1 in BERTopic)
       if (topic.topic_id === -1) {
-        noiseCount = topic.count;
+        // Noise count already captured above
         continue;
       }
 
