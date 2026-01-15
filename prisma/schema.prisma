@@ -112,6 +112,9 @@ model Recall {
   parkIt               Boolean  @default(false) // "Stop driving" severity
   parkOutside          Boolean  @default(false) // Fire hazard indicator
 
+  // Vector embedding for semantic matching (768 dimensions for nomic-embed-text)
+  embedding Unsupported("vector(768)")?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

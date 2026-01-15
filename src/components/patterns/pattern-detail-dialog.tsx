@@ -32,7 +32,17 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  ShieldCheck,
+  ShieldAlert,
+  Info,
+  RefreshCw,
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 type TrendDirection = 'INCREASING' | 'DECREASING' | 'STABLE';
@@ -48,6 +58,23 @@ interface Complaint {
   fire?: boolean;
   injuries?: number;
   deaths?: number;
+}
+
+interface RecallMatch {
+  patternRecallId: string;
+  recallId: string;
+  matchScore: number;
+  matchReason?: string;
+  recall: {
+    id: string;
+    nhtsaCampaignNumber: string;
+    manufacturer: string;
+    make: string;
+    model: string;
+    year: number;
+    component: string;
+    summary: string;
+  };
 }
 
 interface Pattern {
@@ -99,12 +126,19 @@ export function PatternDetailDialog({
   const [isLoadingComplaints, setIsLoadingComplaints] = useState(false);
   const [complaintsExpanded, setComplaintsExpanded] = useState(true);
 
-  // Fetch complaints when dialog opens
+  // Recall matching state
+  const [recallMatches, setRecallMatches] = useState<RecallMatch[]>([]);
+  const [avgSemanticMatch, setAvgSemanticMatch] = useState<number | null>(null);
+  const [isLoadingRecalls, setIsLoadingRecalls] = useState(false);
+  const [recallsExpanded, setRecallsExpanded] = useState(true);
+  const [isRunningMatch, setIsRunningMatch] = useState(false);
+
+  // Fetch complaints and recall matches when dialog opens
   useEffect(() => {
     if (open && pattern?.id) {
+      // Fetch complaints
       setIsLoadingComplaints(true);
       setComplaints([]);
-
       fetch(`/api/patterns/${pattern.id}`)
         .then((res) => res.json())
         .then((data) => {
@@ -118,8 +152,51 @@ export function PatternDetailDialog({
         .finally(() => {
           setIsLoadingComplaints(false);
         });
+
+      // Fetch recall matches
+      setIsLoadingRecalls(true);
+      setRecallMatches([]);
+      fetch(`/api/patterns/${pattern.id}/semantic-match`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.matches) {
+            setRecallMatches(data.matches);
+            setAvgSemanticMatch(data.avgSemanticMatch);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch recall matches:', error);
+        })
+        .finally(() => {
+          setIsLoadingRecalls(false);
+        });
     }
   }, [open, pattern?.id]);
+
+  // Function to trigger semantic matching
+  const runSemanticMatch = async () => {
+    if (!pattern?.id) return;
+    setIsRunningMatch(true);
+    try {
+      const res = await fetch(`/api/patterns/${pattern.id}/semantic-match`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.matches) {
+        // Refresh the matches
+        const refreshRes = await fetch(`/api/patterns/${pattern.id}/semantic-match`);
+        const refreshData = await refreshRes.json();
+        if (refreshData.matches) {
+          setRecallMatches(refreshData.matches);
+          setAvgSemanticMatch(refreshData.avgSemanticMatch);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to run semantic matching:', error);
+    } finally {
+      setIsRunningMatch(false);
+    }
+  };
 
   if (!pattern) return null;
 
@@ -298,6 +375,143 @@ export function PatternDetailDialog({
                           </div>
                           <p className="text-sm text-muted-foreground line-clamp-2">
                             {complaint.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Linked Recalls Section */}
+          <div>
+            <button
+              onClick={() => setRecallsExpanded(!recallsExpanded)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">
+                  Linked Recalls ({isLoadingRecalls ? '...' : recallMatches.length})
+                </span>
+                {avgSemanticMatch !== null && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'ml-2',
+                            avgSemanticMatch >= 0.7
+                              ? 'border-success text-success'
+                              : avgSemanticMatch >= 0.4
+                              ? 'border-warning text-warning'
+                              : 'border-destructive text-destructive'
+                          )}
+                        >
+                          {(avgSemanticMatch * 100).toFixed(0)}% match
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs text-sm">
+                          Average semantic similarity between this pattern&apos;s complaints
+                          and linked recalls. Higher scores indicate recalls that better
+                          address this issue.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    runSemanticMatch();
+                  }}
+                  disabled={isRunningMatch}
+                >
+                  {isRunningMatch ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                </Button>
+                {recallsExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </button>
+
+            {recallsExpanded && (
+              <div className="mt-3">
+                {isLoadingRecalls ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-24 w-full" />
+                    ))}
+                  </div>
+                ) : recallMatches.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <ShieldAlert className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No recall matches found.</p>
+                    <p className="text-xs mt-1">
+                      Click the refresh button to run semantic matching.
+                    </p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-64">
+                    <div className="space-y-2 pr-4">
+                      {recallMatches.map((match) => (
+                        <div
+                          key={match.patternRecallId}
+                          className="p-3 border rounded-lg bg-background hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium text-sm">
+                                {match.recall.nhtsaCampaignNumber}
+                              </span>
+                              <Badge variant="outline" className="text-xs">
+                                {match.recall.component}
+                              </Badge>
+                            </div>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge
+                                    className={cn(
+                                      'text-xs',
+                                      match.matchScore >= 0.7
+                                        ? 'bg-success'
+                                        : match.matchScore >= 0.4
+                                        ? 'bg-warning'
+                                        : 'bg-destructive'
+                                    )}
+                                  >
+                                    {(match.matchScore * 100).toFixed(0)}%
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-sm">{match.matchReason || 'Semantic similarity score'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            {match.recall.year} {match.recall.make} {match.recall.model} • {match.recall.manufacturer}
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {match.recall.summary}
                           </p>
                         </div>
                       ))}

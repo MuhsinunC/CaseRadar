@@ -128,11 +128,14 @@ describe('Dashboard API', () => {
       const request = new NextRequest('http://localhost:3000/api/dashboard/stats');
       await getStats(request);
 
-      // Check that pattern count is called with org filter
+      // Check that pattern count is called with org filter (includes shared patterns)
       expect(prisma.pattern.count).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            organizationId: 'org_123',
+            OR: [
+              { organizationId: 'org_123' },
+              { organizationId: null },
+            ],
           }),
         })
       );

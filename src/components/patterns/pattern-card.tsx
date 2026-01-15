@@ -19,7 +19,16 @@ import {
   Car,
   ShieldCheck,
   ShieldAlert,
+  Target,
+  Sparkles,
+  Info,
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 type TrendDirection = 'INCREASING' | 'DECREASING' | 'STABLE';
@@ -44,6 +53,9 @@ interface Pattern {
   // Recall cross-reference
   recallCount?: number;
   hasRecall?: boolean;
+  // Lead scoring fields
+  leadScore?: number;
+  avgSemanticMatch?: number | null;
 }
 
 interface PatternCardProps {
@@ -81,6 +93,22 @@ const trendIcons: Record<TrendDirection, { icon: typeof TrendingUp; class: strin
   DECREASING: { icon: TrendingDown, class: 'text-success', testId: 'icon-trend-down' },
   STABLE: { icon: Minus, class: 'text-muted-foreground', testId: 'icon-trend-stable' },
 };
+
+function isHighValueLead(pattern: Pattern): boolean {
+  // High-value lead: high lead score OR no recalls linked
+  return (pattern.leadScore !== undefined && pattern.leadScore >= 50) ||
+         pattern.avgSemanticMatch === null;
+}
+
+function getLeadScoreClass(score: number): string {
+  if (score >= 70) return 'bg-amber-500 text-white';
+  if (score >= 50) return 'bg-amber-400 text-black';
+  return 'bg-muted text-muted-foreground';
+}
+
+function formatLeadScore(score: number): string {
+  return score.toFixed(0);
+}
 
 export function PatternCard({
   pattern,
@@ -152,26 +180,100 @@ export function PatternCard({
           </div>
           {/* Recall indicator - key for lead generation */}
           {pattern.hasRecall === false && (
-            <Badge
-              data-testid="no-recall-badge"
-              variant="destructive"
-              className="flex items-center gap-1"
-              title="No related recalls found - potential lead"
-            >
-              <ShieldAlert className="h-3 w-3" />
-              No Recall
-            </Badge>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    data-testid="no-recall-badge"
+                    variant="destructive"
+                    className="flex items-center gap-1 cursor-help"
+                  >
+                    <ShieldAlert className="h-3 w-3" />
+                    No Recall
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-medium mb-1">No Matching Recalls Found</p>
+                  <p className="text-xs text-muted-foreground">
+                    No recalls with semantic similarity to this pattern were found.
+                    This may indicate an unaddressed safety issue - a potential lead
+                    for investigation.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {pattern.hasRecall === true && (
-            <Badge
-              data-testid="has-recall-badge"
-              variant="secondary"
-              className="flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-              title={`${pattern.recallCount} related recall(s) found`}
-            >
-              <ShieldCheck className="h-3 w-3" />
-              Recall ({pattern.recallCount})
-            </Badge>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    data-testid="has-recall-badge"
+                    variant="secondary"
+                    className="flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 cursor-help"
+                  >
+                    <ShieldCheck className="h-3 w-3" />
+                    Recall ({pattern.recallCount})
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-medium mb-1">{pattern.recallCount} Related Recall{pattern.recallCount !== 1 ? 's' : ''} Found</p>
+                  <p className="text-xs text-muted-foreground">
+                    NHTSA recalls with semantic similarity to this pattern&apos;s complaints
+                    have been identified. Click View Details to see the matching recalls
+                    and their similarity scores.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {/* Lead Score indicator with tooltip */}
+          {pattern.leadScore !== undefined && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    data-testid="lead-score-badge"
+                    className={cn('flex items-center gap-1 cursor-help', getLeadScoreClass(pattern.leadScore))}
+                  >
+                    <Target className="h-3 w-3" />
+                    Lead: {formatLeadScore(pattern.leadScore)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-medium mb-1">Lead Score: {pattern.leadScore.toFixed(1)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Calculated from complaint count (30%), severity (30%),
+                    semantic recall match (30%), and trend (10%). Higher scores
+                    indicate patterns that may not be adequately addressed by existing recalls.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {/* High-value lead indicator with tooltip */}
+          {isHighValueLead(pattern) && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    data-testid="high-value-lead-badge"
+                    className="flex items-center gap-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white animate-pulse cursor-help"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Hot Lead
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-medium mb-1">High-Value Lead Detected</p>
+                  <p className="text-xs text-muted-foreground">
+                    This pattern has either a high lead score (&ge;50) or no semantic
+                    match to existing recalls, indicating it may represent an unaddressed
+                    safety issue worth investigating for potential litigation.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
 

@@ -9,9 +9,32 @@
 import { prisma } from '@/lib/db';
 import { recallsClient } from './recalls-client';
 import { RecallSyncStatus, TransformedRecall, RecallsByVehicleParams } from './types';
+import { generateEmbedding, formatEmbeddingForPgvector, checkEmbeddingService } from '@/lib/embeddings';
+import { getRecallEmbeddingText } from '@/lib/patterns/semantic-matching';
 
 // Rate limiting delay (ms)
 const REQUEST_DELAY = 250;
+
+// Embedding service availability
+let embeddingsEnabled = false;
+
+/**
+ * Initialize embedding service check
+ */
+async function initEmbeddingService(): Promise<boolean> {
+  try {
+    embeddingsEnabled = await checkEmbeddingService();
+    if (embeddingsEnabled) {
+      console.log('Embedding service available - recalls will include embeddings');
+    } else {
+      console.warn('Embedding service not available - recalls will be inserted without embeddings');
+    }
+    return embeddingsEnabled;
+  } catch {
+    console.warn('Embedding service check failed - continuing without embeddings');
+    return false;
+  }
+}
 
 /**
  * Sleep helper
@@ -131,42 +154,97 @@ export const recallsSyncService = {
   },
 
   /**
-   * Insert recalls into database (upsert)
+   * Insert recalls into database (upsert) with embedding generation
    */
   async insertRecalls(
     recalls: TransformedRecall[]
-  ): Promise<{ inserted: number; skipped: number }> {
+  ): Promise<{ inserted: number; skipped: number; embeddingsGenerated: number }> {
     let inserted = 0;
     let skipped = 0;
+    let embeddingsGenerated = 0;
+
+    // Check embedding service on first call
+    if (!embeddingsEnabled) {
+      await initEmbeddingService();
+    }
 
     for (const recall of recalls) {
       try {
-        // Upsert recall
-        await prisma.recall.upsert({
-          where: { nhtsaCampaignNumber: recall.nhtsaCampaignNumber },
-          create: {
-            nhtsaCampaignNumber: recall.nhtsaCampaignNumber,
-            manufacturer: recall.manufacturer,
-            make: recall.make,
-            model: recall.model,
-            year: recall.year,
-            component: recall.component,
-            summary: recall.summary,
-            consequence: recall.consequence,
-            remedy: recall.remedy,
-            notes: recall.notes,
-            reportReceivedDate: recall.reportReceivedDate,
-            parkIt: recall.parkIt,
-            parkOutside: recall.parkOutside,
-          },
-          update: {
-            // Update fields that might change
-            summary: recall.summary,
-            consequence: recall.consequence,
-            remedy: recall.remedy,
-            notes: recall.notes,
-          },
-        });
+        // Generate embedding if service is available
+        let embeddingVector: string | null = null;
+        if (embeddingsEnabled) {
+          try {
+            const text = getRecallEmbeddingText({
+              nhtsaCampaignNumber: recall.nhtsaCampaignNumber,
+              manufacturer: recall.manufacturer,
+              make: recall.make,
+              model: recall.model,
+              year: recall.year,
+              component: recall.component,
+              summary: recall.summary,
+              consequence: recall.consequence,
+              remedy: recall.remedy,
+              notes: recall.notes,
+              reportReceivedDate: recall.reportReceivedDate,
+              parkIt: recall.parkIt,
+              parkOutside: recall.parkOutside,
+            });
+            const embedding = await generateEmbedding(text);
+            embeddingVector = formatEmbeddingForPgvector(embedding);
+            embeddingsGenerated++;
+          } catch (embErr) {
+            console.warn(`Failed to generate embedding for recall ${recall.nhtsaCampaignNumber}:`, embErr);
+          }
+        }
+
+        // Upsert recall with or without embedding
+        if (embeddingVector) {
+          await prisma.$executeRaw`
+            INSERT INTO "Recall" (
+              id, "nhtsaCampaignNumber", manufacturer, make, model, year, component,
+              summary, consequence, remedy, notes, "reportReceivedDate", "parkIt", "parkOutside",
+              embedding, "createdAt", "updatedAt"
+            ) VALUES (
+              gen_random_uuid()::text, ${recall.nhtsaCampaignNumber}, ${recall.manufacturer},
+              ${recall.make}, ${recall.model}, ${recall.year}, ${recall.component},
+              ${recall.summary}, ${recall.consequence}, ${recall.remedy}, ${recall.notes},
+              ${recall.reportReceivedDate}, ${recall.parkIt}, ${recall.parkOutside},
+              ${embeddingVector}::vector, NOW(), NOW()
+            )
+            ON CONFLICT ("nhtsaCampaignNumber") DO UPDATE SET
+              summary = EXCLUDED.summary,
+              consequence = EXCLUDED.consequence,
+              remedy = EXCLUDED.remedy,
+              notes = EXCLUDED.notes,
+              embedding = EXCLUDED.embedding,
+              "updatedAt" = NOW()
+          `;
+        } else {
+          await prisma.recall.upsert({
+            where: { nhtsaCampaignNumber: recall.nhtsaCampaignNumber },
+            create: {
+              nhtsaCampaignNumber: recall.nhtsaCampaignNumber,
+              manufacturer: recall.manufacturer,
+              make: recall.make,
+              model: recall.model,
+              year: recall.year,
+              component: recall.component,
+              summary: recall.summary,
+              consequence: recall.consequence,
+              remedy: recall.remedy,
+              notes: recall.notes,
+              reportReceivedDate: recall.reportReceivedDate,
+              parkIt: recall.parkIt,
+              parkOutside: recall.parkOutside,
+            },
+            update: {
+              summary: recall.summary,
+              consequence: recall.consequence,
+              remedy: recall.remedy,
+              notes: recall.notes,
+            },
+          });
+        }
         inserted++;
       } catch (error) {
         // Log but continue
@@ -177,7 +255,7 @@ export const recallsSyncService = {
       }
     }
 
-    return { inserted, skipped };
+    return { inserted, skipped, embeddingsGenerated };
   },
 
   /**

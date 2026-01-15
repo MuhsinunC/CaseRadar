@@ -12,6 +12,7 @@ import { TrendDirection } from '@prisma/client';
 import { logDataModification } from '@/lib/security/audit-logging';
 import { Problems } from '@/lib/api/rfc7807-errors';
 import { buildHybridPaginationResponse } from '@/lib/api/cursor-pagination';
+import { calculateLeadScore } from '@/lib/patterns/lead-scoring';
 
 interface PatternWhereClause {
   organizationId: string;
@@ -83,10 +84,17 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Sorting - default by severityScore descending
-    const sortBy = searchParams.get('sortBy') || 'severityScore';
-    const sortOrder = searchParams.get('sortOrder') || 'desc';
-    const orderBy = { [sortBy]: sortOrder };
+    // Leads filter - show only patterns that are potential leads
+    const leadsOnly = searchParams.get('leadsOnly') === 'true';
+    const minLeadScore = searchParams.get('minLeadScore');
+
+    // Sorting - default by severityScore descending (or leadScore if filtering leads)
+    const sortBy = searchParams.get('sortBy') || (leadsOnly ? 'leadScore' : 'severityScore');
+    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+    // For leadScore sorting, we'll sort after fetching since it's computed
+    const orderBy = sortBy === 'leadScore'
+      ? { severityScore: sortOrder }
+      : { [sortBy]: sortOrder };
 
     const [patterns, total] = await Promise.all([
       prisma.pattern.findMany({
@@ -98,7 +106,12 @@ export async function GET(request: NextRequest) {
           _count: {
             select: {
               complaints: true,
-              recalls: true, // Count linked recalls
+              recalls: true,
+            },
+          },
+          recalls: {
+            select: {
+              matchScore: true,
             },
           },
         },
@@ -106,24 +119,67 @@ export async function GET(request: NextRequest) {
       prisma.pattern.count({ where }),
     ]);
 
-    // Map patterns to include complaintCount and recallCount
-    const mappedPatterns = patterns.map((p) => ({
-      ...p,
-      complaintCount: p._count.complaints,
-      recallCount: p._count.recalls,
-      hasRecall: p._count.recalls > 0,
-    }));
+    // Map patterns to include complaintCount, recallCount, and lead scores
+    const mappedPatterns = patterns.map((p) => {
+      // Get recalls from the included relation
+      const patternRecalls = p.recalls as Array<{ matchScore: number }>;
+      const patternCounts = p._count as { complaints: number; recalls: number };
+
+      // Calculate average semantic match score from PatternRecall
+      const avgSemanticMatch = patternRecalls.length > 0
+        ? patternRecalls.reduce((sum: number, r) => sum + r.matchScore, 0) / patternRecalls.length
+        : -1; // -1 indicates no recalls linked
+
+      // Calculate lead score
+      const leadResult = calculateLeadScore({
+        complaintCount: p.complaintCount,
+        severityScore: p.severityScore,
+        avgSemanticMatch,
+        trendScore: p.trendScore,
+      });
+
+      return {
+        ...p,
+        complaintCount: patternCounts.complaints,
+        recallCount: patternCounts.recalls,
+        hasRecall: patternCounts.recalls > 0,
+        avgSemanticMatch: avgSemanticMatch === -1 ? null : avgSemanticMatch,
+        leadScore: leadResult.score,
+        leadBreakdown: leadResult.breakdown,
+        recalls: undefined, // Don't expose raw recalls array
+      };
+    });
+
+    // Apply lead score filtering if requested
+    let filteredPatterns = mappedPatterns;
+    if (leadsOnly) {
+      // Filter to patterns with no recall or low semantic match (high lead potential)
+      filteredPatterns = mappedPatterns.filter(p =>
+        p.avgSemanticMatch === null || p.avgSemanticMatch < 0.5
+      );
+    }
+    if (minLeadScore) {
+      const minScore = parseFloat(minLeadScore);
+      filteredPatterns = filteredPatterns.filter(p => p.leadScore >= minScore);
+    }
+
+    // Sort by lead score if requested
+    if (sortBy === 'leadScore') {
+      filteredPatterns.sort((a, b) =>
+        sortOrder === 'desc' ? b.leadScore - a.leadScore : a.leadScore - b.leadScore
+      );
+    }
 
     // Build hybrid pagination response (supports both cursor and offset)
     const pagination = buildHybridPaginationResponse(
-      mappedPatterns as Array<{ id: string }>,
+      filteredPatterns as Array<{ id: string }>,
       page,
       limit,
-      total
+      leadsOnly || minLeadScore ? filteredPatterns.length : total
     );
 
     return NextResponse.json({
-      patterns: mappedPatterns,
+      patterns: filteredPatterns,
       pagination,
     });
   } catch (error) {

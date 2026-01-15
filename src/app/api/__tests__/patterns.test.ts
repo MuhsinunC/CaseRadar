@@ -67,10 +67,13 @@ describe('Patterns API', () => {
           yearRange: '2020-2023',
           severity: 8.5,
           complaintCount: 150,
+          severityScore: 85,
+          trendScore: 50,
           trendDirection: 'INCREASING',
           organizationId: 'org_123',
           createdAt: new Date('2024-01-01'),
-          _count: { complaints: 150 },
+          _count: { complaints: 150, recalls: 1 },
+          recalls: [{ matchScore: 0.75 }], // For lead score calculation
         },
       ] as any);
       vi.mocked(prisma.pattern.count).mockResolvedValue(1);
@@ -93,10 +96,14 @@ describe('Patterns API', () => {
       const request = new NextRequest('http://localhost:3000/api/patterns');
       await getPatterns(request);
 
+      // Patterns query includes org-specific and shared (null organizationId) patterns
       expect(prisma.pattern.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            organizationId: 'org_123',
+            OR: [
+              { organizationId: 'org_123' },
+              { organizationId: null },
+            ],
           }),
         })
       );
@@ -224,6 +231,7 @@ describe('Patterns API', () => {
       vi.mocked(prisma.pattern.findUnique).mockResolvedValue({
         id: 'pattern_1',
         organizationId: 'other_org', // Different org
+        complaints: [], // Required for route handler to process
       } as any);
 
       const request = new NextRequest('http://localhost:3000/api/patterns/pattern_1');
@@ -455,6 +463,7 @@ describe('Patterns API - Trend Data', () => {
     vi.mocked(prisma.pattern.findUnique).mockResolvedValue({
       id: 'pattern_1',
       organizationId: 'org_123',
+      complaints: [], // Required for route handler to process
       trendData: [
         { date: '2024-01', count: 10, severity: 7.5 },
         { date: '2024-02', count: 15, severity: 8.0 },

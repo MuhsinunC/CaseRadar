@@ -17,7 +17,7 @@ describe('PatternCard', () => {
     yearStart: 2020,
     yearEnd: 2023,
     component: 'AIR BAGS',
-    severityScore: 8.5,
+    severityScore: 1500, // High severity (>=1000 is destructive)
     trendDirection: 'INCREASING' as const,
     complaintCount: 150,
     deathCount: 2,
@@ -46,17 +46,19 @@ describe('PatternCard', () => {
     render(<PatternCard pattern={mockPattern} />);
 
     const severityBadge = screen.getByTestId('severity-badge');
-    expect(severityBadge).toHaveTextContent('8.5');
-    expect(severityBadge).toHaveClass('bg-destructive'); // High severity
+    expect(severityBadge).toHaveTextContent('1.5K'); // formatSeverity(1500) = "1.5K"
+    expect(severityBadge).toHaveClass('bg-destructive'); // High severity (>=1000)
   });
 
   it('should show different severity styling based on score', () => {
-    const lowSeverityPattern = { ...mockPattern, severityScore: 3.5 };
+    // Low severity: < 500 = bg-success
+    const lowSeverityPattern = { ...mockPattern, severityScore: 300 };
     const { rerender } = render(<PatternCard pattern={lowSeverityPattern} />);
 
     expect(screen.getByTestId('severity-badge')).toHaveClass('bg-success');
 
-    const mediumSeverityPattern = { ...mockPattern, severityScore: 6.0 };
+    // Medium severity: >= 500 and < 1000 = bg-warning
+    const mediumSeverityPattern = { ...mockPattern, severityScore: 700 };
     rerender(<PatternCard pattern={mediumSeverityPattern} />);
 
     expect(screen.getByTestId('severity-badge')).toHaveClass('bg-warning');

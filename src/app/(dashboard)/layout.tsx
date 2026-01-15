@@ -18,6 +18,7 @@ import {
   Settings,
   Menu,
   X,
+  Target,
 } from 'lucide-react';
 import { UserButton } from '@clerk/nextjs';
 
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Complaints', href: '/complaints', icon: FileSearch },
   { name: 'Patterns', href: '/patterns', icon: TrendingUp },
+  { name: 'Leads', href: '/leads', icon: Target },
   { name: 'Generator', href: '/generator', icon: FileText },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
