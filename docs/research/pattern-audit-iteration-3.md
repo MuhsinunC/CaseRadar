@@ -1,6 +1,6 @@
 # Pattern Detection Algorithm Audit - Iteration 3
 **Date:** 2026-01-15
-**Purpose:** Deep audit and bug fix for cross-model contamination
+**Purpose:** Deep audit, cross-model contamination fix, and sample limit increase
 
 ---
 
@@ -18,15 +18,37 @@
 
 ---
 
+## Sample Limit Increase
+
+**Problem:** The pattern detection was processing only 10,000 most recent complaints, causing:
+- Many vehicles to be underrepresented (HYUNDAI KONA had only 48/136 complaints in sample)
+- 1 death complaint remaining in noise (HYUNDAI KONA SEATS)
+- 5 fire complaints remaining in noise (HYUNDAI KONA, KONA ELECTRIC, FORD F-150)
+
+**Fix:** Increased sample limit from 10,000 to 50,000 (enough for all 17,589 complaints with embeddings).
+
+**Result:**
+- Complaint coverage: 54% → **92.6%**
+- Deaths in noise: 1 → **0**
+- Injuries in noise: 12 → **0**
+- Crashes in noise: 11 → **0**
+- Fires in noise: 5 → **2** (remaining are F-150 with only 3 total complaints - can't form pattern)
+
+---
+
 ## Current Quality Metrics
 
 | Metric | Target | Achieved |
 |--------|--------|----------|
 | Cross-make contamination | 0% | **0%** ✅ |
-| Cross-model contamination | 0% | **0%** ✅ (fixed!) |
+| Cross-model contamination | 0% | **0%** ✅ |
 | Duplicate pattern groups | 0 | **0** ✅ |
 | Severity metrics populated | Yes | **Yes** ✅ |
-| Trend detection working | Not all STABLE | **36% INCREASING, 5% DECREASING** ✅ |
+| Trend detection working | Not all STABLE | **22% INCREASING, 7% DECREASING** ✅ |
+| Complaint coverage | >80% | **92.6%** ✅ |
+| Deaths in noise | 0 | **0** ✅ |
+| Injuries in noise | 0 | **0** ✅ |
+| Crashes in noise | 0 | **0** ✅ |
 | All tests pass | Yes | **1268 pass** ✅ |
 
 ---

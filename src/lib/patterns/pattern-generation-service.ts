@@ -266,7 +266,7 @@ export class PatternGenerationService {
       FROM "Complaint"
       WHERE embedding IS NOT NULL
       ORDER BY "dateAdded" DESC
-      LIMIT 10000
+      LIMIT 50000
     `);
 
     return complaints;
