@@ -43,6 +43,36 @@ vi.mock('@/lib/patterns/ml-detection-client', () => ({
   },
 }));
 
+// Helper to generate mock complaints for a vehicle (Option A requires 10+ per vehicle)
+function generateMockComplaints(
+  count: number,
+  overrides: Partial<{
+    make: string;
+    model: string;
+    component: string;
+    year: number;
+    deaths: number;
+    injuries: number;
+    crash: boolean;
+    fire: boolean;
+  }> = {}
+) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `c${i}`,
+    description: `Complaint ${i} description`,
+    make: overrides.make ?? 'HONDA',
+    model: overrides.model ?? 'CIVIC',
+    year: overrides.year ?? 2020,
+    component: overrides.component ?? 'STEERING',
+    deaths: overrides.deaths ?? 0,
+    injuries: overrides.injuries ?? 0,
+    crash: overrides.crash ?? false,
+    fire: overrides.fire ?? false,
+    dateAdded: new Date(),
+    embedding: `[${0.1 + i * 0.01},${0.2 + i * 0.01}]`,
+  }));
+}
+
 describe('PatternGenerationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,53 +152,25 @@ describe('PatternGenerationService', () => {
       const { prisma } = await import('@/lib/db');
       const { mlDetectionClient } = await import('@/lib/patterns/ml-detection-client');
 
+      // Option A requires 10+ complaints per vehicle group
+      const mockComplaints = generateMockComplaints(12, { make: 'TOYOTA', model: 'CAMRY', component: 'BRAKE' });
       vi.mocked(mlDetectionClient.isAvailable).mockResolvedValue(true);
-      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
-        {
-          id: 'c1',
-          description: 'Brake issue',
-          make: 'TOYOTA',
-          model: 'CAMRY',
-          year: 2020,
-          component: 'BRAKE',
-          deaths: 0,
-          injuries: 0,
-          crash: false,
-          fire: false,
-          dateAdded: new Date(),
-          embedding: '[0.1,0.2,0.3]',
-        },
-        {
-          id: 'c2',
-          description: 'Engine stall',
-          make: 'FORD',
-          model: 'F150',
-          year: 2021,
-          component: 'ENGINE',
-          deaths: 0,
-          injuries: 0,
-          crash: false,
-          fire: false,
-          dateAdded: new Date(),
-          embedding: '[0.4,0.5,0.6]',
-        },
-      ]);
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(mockComplaints);
       vi.mocked(mlDetectionClient.topics.fitTopics).mockResolvedValue({
         success: true,
-        topic_count: 2,
+        topic_count: 1,
         topics: [
-          { topic_id: 0, name: 'brake_issue', count: 1, words: ['brake'], scores: [0.9] },
-          { topic_id: 1, name: 'engine_stall', count: 1, words: ['engine'], scores: [0.8] },
+          { topic_id: 0, name: 'brake_issue', count: 12, words: ['brake'], scores: [0.9] },
         ],
       });
       vi.mocked(prisma.pattern.upsert).mockResolvedValue({
         id: 'p1',
         name: 'test',
         make: 'TOYOTA',
-        model: null,
+        model: 'CAMRY',
         component: 'BRAKE',
         severityScore: 0,
-        complaintCount: 1,
+        complaintCount: 12,
         trendDirection: 'STABLE',
         trendScore: 0,
         firstSeen: new Date(),
@@ -187,40 +189,27 @@ describe('PatternGenerationService', () => {
       await service.generatePatterns();
 
       // Verify ML service was called with documents and embeddings
-      expect(mlDetectionClient.topics.fitTopics).toHaveBeenCalledWith(
-        ['Brake issue', 'Engine stall'],
-        [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
-      );
+      expect(mlDetectionClient.topics.fitTopics).toHaveBeenCalled();
+      const callArgs = vi.mocked(mlDetectionClient.topics.fitTopics).mock.calls[0];
+      expect(callArgs[0]).toHaveLength(12); // 12 documents
+      expect(callArgs[1]).toHaveLength(12); // 12 embeddings
     });
 
     it('should create Pattern records from ML clusters', async () => {
       const { prisma } = await import('@/lib/db');
       const { mlDetectionClient } = await import('@/lib/patterns/ml-detection-client');
 
+      // Option A requires 10+ complaints per vehicle group
+      const mockComplaints = generateMockComplaints(12, { make: 'TOYOTA', model: 'CAMRY', component: 'BRAKE', injuries: 2, crash: true });
       vi.mocked(mlDetectionClient.isAvailable).mockResolvedValue(true);
-      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
-        {
-          id: 'c1',
-          description: 'Brake failure',
-          make: 'TOYOTA',
-          model: 'CAMRY',
-          year: 2020,
-          component: 'BRAKE',
-          deaths: 0,
-          injuries: 2,
-          crash: true,
-          fire: false,
-          dateAdded: new Date('2024-01-15'),
-          embedding: '[0.1,0.2,0.3]',
-        },
-      ]);
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(mockComplaints);
       vi.mocked(mlDetectionClient.topics.fitTopics).mockResolvedValue({
         success: true,
         topic_count: 1,
         topics: [{
           topic_id: 0,
           name: 'brake_failure_driving',
-          count: 1,
+          count: 12,
           words: ['brake', 'failure', 'driving'],
           scores: [0.9, 0.85, 0.7],
         }],
@@ -232,7 +221,7 @@ describe('PatternGenerationService', () => {
         model: 'CAMRY',
         component: 'BRAKE',
         severityScore: 25,
-        complaintCount: 1,
+        complaintCount: 12,
         trendDirection: 'STABLE',
         trendScore: 0,
         firstSeen: new Date(),
@@ -259,44 +248,17 @@ describe('PatternGenerationService', () => {
       const { prisma } = await import('@/lib/db');
       const { mlDetectionClient } = await import('@/lib/patterns/ml-detection-client');
 
+      // Option A requires at least 10 complaints per vehicle
+      const mockComplaints = generateMockComplaints(12, { make: 'HONDA', model: 'CIVIC', component: 'STEERING' });
       vi.mocked(mlDetectionClient.isAvailable).mockResolvedValue(true);
-      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
-        {
-          id: 'c1',
-          description: 'Test',
-          make: 'HONDA',
-          model: 'CIVIC',
-          year: 2019,
-          component: 'STEERING',
-          deaths: 0,
-          injuries: 0,
-          crash: false,
-          fire: false,
-          dateAdded: new Date(),
-          embedding: '[0.1,0.2]',
-        },
-        {
-          id: 'c2',
-          description: 'Test 2',
-          make: 'HONDA',
-          model: 'CIVIC',
-          year: 2020,
-          component: 'STEERING',
-          deaths: 0,
-          injuries: 0,
-          crash: false,
-          fire: false,
-          dateAdded: new Date(),
-          embedding: '[0.3,0.4]',
-        },
-      ]);
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(mockComplaints);
       vi.mocked(mlDetectionClient.topics.fitTopics).mockResolvedValue({
         success: true,
         topic_count: 1,
         topics: [{
           topic_id: 0,
           name: 'steering_issue',
-          count: 2,
+          count: 12,
           words: ['steering'],
           scores: [0.9],
         }],
@@ -308,7 +270,7 @@ describe('PatternGenerationService', () => {
         model: 'CIVIC',
         component: 'STEERING',
         severityScore: 0,
-        complaintCount: 2,
+        complaintCount: 12,
         trendDirection: 'STABLE',
         trendScore: 0,
         firstSeen: new Date(),
@@ -337,30 +299,26 @@ describe('PatternGenerationService', () => {
       const { prisma } = await import('@/lib/db');
       const { mlDetectionClient } = await import('@/lib/patterns/ml-detection-client');
 
+      // Option A requires 10+ complaints per vehicle group
+      // Create 12 complaints with severe data: 2 deaths, 5 injuries, crash, fire
+      const mockComplaints = generateMockComplaints(12, {
+        make: 'FORD',
+        model: 'F150',
+        component: 'BRAKE',
+        deaths: 2,
+        injuries: 5,
+        crash: true,
+        fire: true,
+      });
       vi.mocked(mlDetectionClient.isAvailable).mockResolvedValue(true);
-      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
-        {
-          id: 'c1',
-          description: 'Severe crash',
-          make: 'FORD',
-          model: 'F150',
-          year: 2022,
-          component: 'BRAKE',
-          deaths: 2,       // 2 * 100 = 200
-          injuries: 5,     // 5 * 10 = 50
-          crash: true,     // 1 * 25 = 25
-          fire: true,      // 1 * 25 = 25
-          dateAdded: new Date(),
-          embedding: '[0.1,0.2]',
-        },
-      ]);
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(mockComplaints);
       vi.mocked(mlDetectionClient.topics.fitTopics).mockResolvedValue({
         success: true,
         topic_count: 1,
         topics: [{
           topic_id: 0,
           name: 'severe_crash_pattern',
-          count: 1,
+          count: 12,
           words: ['crash', 'severe'],
           scores: [0.9, 0.8],
         }],
@@ -392,38 +350,26 @@ describe('PatternGenerationService', () => {
 
       // Verify severity score calculation
       const upsertCall = vi.mocked(prisma.pattern.upsert).mock.calls[0][0];
-      // Expected: deaths(2)*100 + injuries(5)*10 + crash(1)*25 + fire(1)*25 = 300
-      expect(upsertCall.create.severityScore).toBe(300);
+      // Expected per complaint: deaths(2)*100 + injuries(5)*10 + crash(1)*25 + fire(1)*25 = 300
+      // With 12 complaints: 12 * 300 = 3600
+      expect(upsertCall.create.severityScore).toBe(3600);
     });
 
     it('should link complaints to their patterns via clusterId', async () => {
       const { prisma } = await import('@/lib/db');
       const { mlDetectionClient } = await import('@/lib/patterns/ml-detection-client');
 
+      // Option A requires 10+ complaints per vehicle group
+      const mockComplaints = generateMockComplaints(12, { make: 'BMW', model: 'X5', component: 'ENGINE' });
       vi.mocked(mlDetectionClient.isAvailable).mockResolvedValue(true);
-      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
-        {
-          id: 'c1',
-          description: 'Test',
-          make: 'BMW',
-          model: 'X5',
-          year: 2021,
-          component: 'ENGINE',
-          deaths: 0,
-          injuries: 0,
-          crash: false,
-          fire: false,
-          dateAdded: new Date(),
-          embedding: '[0.1,0.2]',
-        },
-      ]);
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(mockComplaints);
       vi.mocked(mlDetectionClient.topics.fitTopics).mockResolvedValue({
         success: true,
         topic_count: 1,
         topics: [{
           topic_id: 0,
           name: 'engine_pattern',
-          count: 1,
+          count: 12,
           words: ['engine'],
           scores: [0.9],
         }],
@@ -435,7 +381,7 @@ describe('PatternGenerationService', () => {
         model: 'X5',
         component: 'ENGINE',
         severityScore: 0,
-        complaintCount: 1,
+        complaintCount: 12,
         trendDirection: 'STABLE',
         trendScore: 0,
         firstSeen: new Date(),
@@ -454,10 +400,11 @@ describe('PatternGenerationService', () => {
       await service.generatePatterns();
 
       // Verify complaints were linked to pattern
-      expect(prisma.complaint.updateMany).toHaveBeenCalledWith({
-        where: { id: { in: ['c1'] } },
-        data: { clusterId: 'pattern_123' },
-      });
+      // With 12 complaints, all should be linked
+      expect(prisma.complaint.updateMany).toHaveBeenCalled();
+      const updateCall = vi.mocked(prisma.complaint.updateMany).mock.calls[0][0];
+      expect(updateCall.where.id.in).toHaveLength(12);
+      expect(updateCall.data.clusterId).toBe('pattern_123');
     });
 
     it('should handle ML service unavailability gracefully', async () => {
@@ -495,44 +442,17 @@ describe('PatternGenerationService', () => {
       const { prisma } = await import('@/lib/db');
       const { mlDetectionClient } = await import('@/lib/patterns/ml-detection-client');
 
+      // Option A requires 10+ complaints per vehicle group
+      const mockComplaints = generateMockComplaints(12, { make: 'TOYOTA', model: 'CAMRY', component: 'BRAKE' });
       vi.mocked(mlDetectionClient.isAvailable).mockResolvedValue(true);
-      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
-        {
-          id: 'c1',
-          description: 'Normal complaint',
-          make: 'TOYOTA',
-          model: 'CAMRY',
-          year: 2020,
-          component: 'BRAKE',
-          deaths: 0,
-          injuries: 0,
-          crash: false,
-          fire: false,
-          dateAdded: new Date(),
-          embedding: '[0.1,0.2]',
-        },
-        {
-          id: 'noise_complaint',
-          description: 'Random noise',
-          make: 'OTHER',
-          model: 'UNKNOWN',
-          year: 2020,
-          component: 'OTHER',
-          deaths: 0,
-          injuries: 0,
-          crash: false,
-          fire: false,
-          dateAdded: new Date(),
-          embedding: '[0.9,0.9]',
-        },
-      ]);
-      // BERTopic returns topic_id: -1 for noise/outliers
+      vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue(mockComplaints);
+      // BERTopic returns topic_id: -1 for noise/outliers (some complaints are noise)
       vi.mocked(mlDetectionClient.topics.fitTopics).mockResolvedValue({
         success: true,
         topic_count: 1,
         topics: [
-          { topic_id: 0, name: 'brake_topic', count: 1, words: ['brake'], scores: [0.9] },
-          { topic_id: -1, name: 'outlier', count: 1, words: [], scores: [] },
+          { topic_id: 0, name: 'brake_topic', count: 10, words: ['brake'], scores: [0.9] },
+          { topic_id: -1, name: 'outlier', count: 2, words: [], scores: [] },
         ],
       });
       vi.mocked(prisma.pattern.upsert).mockResolvedValue({
@@ -542,7 +462,7 @@ describe('PatternGenerationService', () => {
         model: 'CAMRY',
         component: 'BRAKE',
         severityScore: 0,
-        complaintCount: 1,
+        complaintCount: 10,
         trendDirection: 'STABLE',
         trendScore: 0,
         firstSeen: new Date(),
@@ -562,7 +482,7 @@ describe('PatternGenerationService', () => {
 
       // Should only create 1 pattern (not for noise topic_id: -1)
       expect(prisma.pattern.upsert).toHaveBeenCalledTimes(1);
-      expect(result.noiseCount).toBe(1);
+      expect(result.noiseCount).toBe(2);
     });
   });
 

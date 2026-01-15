@@ -116,19 +116,42 @@ class TopicClusteringModel:
             random_state=self.random_state,
         )
 
-    def _create_vectorizer(self) -> CountVectorizer:
-        """Create CountVectorizer for topic representation."""
+    def _create_vectorizer(self, n_docs: int = 1000) -> CountVectorizer:
+        """
+        Create CountVectorizer for topic representation.
+
+        Dynamically adjusts min_df based on corpus size to handle
+        smaller per-vehicle datasets from Option A filtering.
+        """
+        # Adaptive min_df: use smaller value for smaller corpora
+        # For large corpora (1000+): min_df=5
+        # For medium corpora (100-999): min_df=3
+        # For small corpora (<100): min_df=2
+        if n_docs >= 1000:
+            min_df = 5
+        elif n_docs >= 100:
+            min_df = 3
+        else:
+            min_df = 2
+
+        # max_df should be at least min_df + 1 documents worth
+        # For corpus of 643 docs, 0.95 = 610 docs which is > min_df=3, so OK
+        # But sklearn requires max_df as a proportion to result in > min_df docs
+        # Use 1.0 (no upper limit) for smaller corpora to avoid the edge case
+        max_df = 1.0 if n_docs < 1000 else 0.95
+
         return CountVectorizer(
             stop_words='english',
-            ngram_range=(1, 3),  # Include unigrams, bigrams, trigrams
-            min_df=5,  # Term must appear in 5+ docs
+            ngram_range=(1, 2),  # Reduced to bigrams for smaller corpora
+            min_df=min_df,
+            max_df=max_df,
         )
 
-    def _create_topic_model(self) -> BERTopic:
+    def _create_topic_model(self, n_docs: int = 1000) -> BERTopic:
         """Create BERTopic model with all components."""
         self._hdbscan_model = self._create_hdbscan()
         self._umap_model = self._create_umap()
-        self._vectorizer_model = self._create_vectorizer()
+        self._vectorizer_model = self._create_vectorizer(n_docs)
 
         return BERTopic(
             hdbscan_model=self._hdbscan_model,
@@ -154,16 +177,44 @@ class TopicClusteringModel:
         Returns:
             List of TopicResult objects
         """
-        logger.info(f"Fitting topic model on {len(documents)} documents...")
+        n_docs = len(documents)
+        logger.info(f"Fitting topic model on {n_docs} documents...")
 
-        # Create fresh model
-        self._topic_model = self._create_topic_model()
+        # Create fresh model with adaptive parameters for corpus size
+        self._topic_model = self._create_topic_model(n_docs)
+
+        # Log vectorizer parameters for debugging
+        vec = self._vectorizer_model
+        logger.info(f"Vectorizer params: min_df={vec.min_df}, max_df={vec.max_df}, ngram_range={vec.ngram_range}")
 
         # Fit the model
-        if embeddings is not None:
-            topics, probs = self._topic_model.fit_transform(documents, embeddings)
-        else:
-            topics, probs = self._topic_model.fit_transform(documents)
+        try:
+            if embeddings is not None:
+                topics, probs = self._topic_model.fit_transform(documents, embeddings)
+            else:
+                topics, probs = self._topic_model.fit_transform(documents)
+        except ValueError as e:
+            logger.error(f"BERTopic fit_transform error: {e}")
+            # Try with more permissive vectorizer settings
+            logger.info("Retrying with more permissive vectorizer settings...")
+            self._vectorizer_model = CountVectorizer(
+                stop_words='english',
+                ngram_range=(1, 1),  # Just unigrams
+                min_df=1,  # Accept any term
+                max_df=1.0,  # No upper limit
+            )
+            self._topic_model = BERTopic(
+                hdbscan_model=self._hdbscan_model,
+                umap_model=self._umap_model,
+                vectorizer_model=self._vectorizer_model,
+                top_n_words=10,
+                verbose=True,
+                calculate_probabilities=True,
+            )
+            if embeddings is not None:
+                topics, probs = self._topic_model.fit_transform(documents, embeddings)
+            else:
+                topics, probs = self._topic_model.fit_transform(documents)
 
         self._is_fitted = True
 

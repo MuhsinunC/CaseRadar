@@ -99,7 +99,7 @@ export interface TransformedComplaint {
   manufacturer: string;
   make: string;
   model: string;
-  year: number;
+  year: number | null; // null for equipment without model years (e.g., charging stations)
   component: string;
   description: string;
   crash: boolean;

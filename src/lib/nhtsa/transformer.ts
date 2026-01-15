@@ -52,6 +52,23 @@ function parseInteger(value: string | number | null | undefined): number {
 }
 
 /**
+ * Sanitize model year - NHTSA sometimes returns 9999 for equipment without model years
+ * Returns null for invalid years (< 1900 or > current year + 2)
+ */
+function sanitizeYear(year: number | null | undefined): number | null {
+  if (year === null || year === undefined) {
+    return null;
+  }
+  const currentYear = new Date().getFullYear();
+  const maxValidYear = currentYear + 2; // Allow 2 years in future for new models
+
+  if (year < 1900 || year > maxValidYear) {
+    return null;
+  }
+  return year;
+}
+
+/**
  * Normalize text: trim, handle nulls, and standardize whitespace
  */
 function normalizeText(value: string | null | undefined): string {
@@ -90,7 +107,7 @@ export function transformSODARecord(record: SODAComplaintRecord): TransformedCom
     manufacturer: normalizeText(record.mfr_name),
     make: normalizeText(record.maketxt).toUpperCase(),
     model: normalizeText(record.modeltxt),
-    year: parseInteger(record.yeartxt),
+    year: sanitizeYear(parseInteger(record.yeartxt)),
     component: extractComponent(record.compdesc),
     description: normalizeText(record.cdescr),
     crash: parseBoolean(record.crash),
@@ -129,7 +146,7 @@ export function transformAPIRecord(record: NHTSAComplaintRaw): TransformedCompla
     manufacturer: normalizeText(record.manufacturer),
     make: normalizeText(product.make).toUpperCase(),
     model: normalizeText(product.model),
-    year: product.year,
+    year: sanitizeYear(product.year),
     component: extractComponent(record.components),
     description: normalizeText(record.summary),
     crash: parseBoolean(record.crash),
@@ -202,7 +219,8 @@ export function validateComplaint(complaint: TransformedComplaint): string[] {
   if (!complaint.model) {
     errors.push('Missing model');
   }
-  if (!complaint.year || complaint.year < 1900 || complaint.year > 2100) {
+  // Year can be null for equipment without model years - this is valid
+  if (complaint.year !== null && (complaint.year < 1900 || complaint.year > 2100)) {
     errors.push(`Invalid year: ${complaint.year}`);
   }
   if (!complaint.component) {

@@ -66,7 +66,7 @@ model Complaint {
   manufacturer String
   make         String
   model        String
-  year         Int
+  year         Int? // Nullable for equipment without model years (e.g., charging stations)
   component    String
   description  String    @db.Text
   crash        Boolean   @default(false)
