@@ -1,8 +1,8 @@
 # CaseRadar Pattern Detection System Architecture
 
-**Version:** 1.0
+**Version:** 2.1
 **Last Updated:** January 2025
-**Status:** Draft - Iteration 1
+**Status:** Ready for Principal Engineer Review
 
 ---
 
@@ -18,8 +18,9 @@
 8. [Trade-off Analysis](#trade-off-analysis)
 9. [Failure Modes & Mitigations](#failure-modes--mitigations)
 10. [Phased Implementation Plan](#phased-implementation-plan)
-11. [Monitoring & Observability](#monitoring--observability)
-12. [References](#references)
+11. [Success Metrics & Evaluation](#success-metrics--evaluation)
+12. [Monitoring & Observability](#monitoring--observability)
+13. [References](#references)
 
 **Appendices:**
 - [A: Algorithm Quick Reference](#appendix-a-algorithm-quick-reference)
@@ -1017,6 +1018,226 @@ gantt
 - [ ] Performance benchmarking
 - [ ] Monitoring dashboards (Grafana)
 - [ ] Documentation and runbooks
+
+---
+
+## Success Metrics & Evaluation
+
+### Business KPIs
+
+| Metric | Definition | Target | Measurement |
+|--------|------------|--------|-------------|
+| **Early Detection Rate** | % of eventual recalls detected >30 days before announcement | >50% | Historical backtesting |
+| **Signal Precision** | % of strong signals that correspond to real defects | >70% | Manual validation sample |
+| **Attorney Adoption** | % of generated patterns reviewed by attorneys | >80% | Usage analytics |
+| **Time to Insight** | Average time from complaint to pattern inclusion | <48 hours | Pipeline metrics |
+| **Case Discovery Rate** | New cases discovered via pattern alerts | Track | CRM integration |
+
+### Technical Quality Metrics
+
+#### Topic Model Quality
+
+| Metric | What It Measures | Target | Calculation |
+|--------|-----------------|--------|-------------|
+| **Coherence Score (CV)** | Semantic similarity of top words in topic | >0.4 | Gensim coherence pipeline |
+| **Coherence Score (UMass)** | Word co-occurrence in corpus | >-2.0 | Higher is better |
+| **Silhouette Score** | Cluster separation quality | >0.3 | sklearn.metrics |
+| **Topic Diversity** | Uniqueness across topics | >0.7 | Unique words / total words |
+| **Topic Stability** | Consistency across runs | >0.8 | Jaccard similarity |
+
+```python
+from gensim.models.coherencemodel import CoherenceModel
+from sklearn.metrics import silhouette_score
+
+def evaluate_topic_model(topic_model, documents, embeddings):
+    """Comprehensive topic model evaluation."""
+    # Get topics
+    topics = topic_model.get_topics()
+    topic_words = [[word for word, _ in topic_model.get_topic(t)]
+                   for t in range(len(topics)) if t != -1]
+
+    # Coherence (CV) - semantic similarity
+    coherence_cv = CoherenceModel(
+        topics=topic_words,
+        texts=[doc.split() for doc in documents],
+        coherence='c_v'
+    ).get_coherence()
+
+    # Coherence (UMass) - co-occurrence based
+    coherence_umass = CoherenceModel(
+        topics=topic_words,
+        texts=[doc.split() for doc in documents],
+        coherence='u_mass'
+    ).get_coherence()
+
+    # Silhouette score for clustering quality
+    labels = topic_model.topics_
+    # Exclude noise points (-1)
+    mask = labels != -1
+    if mask.sum() > 1:
+        silhouette = silhouette_score(embeddings[mask], labels[mask])
+    else:
+        silhouette = 0.0
+
+    # Topic diversity
+    unique_words = set()
+    total_words = 0
+    for topic in topic_words:
+        unique_words.update(topic[:10])
+        total_words += 10
+    diversity = len(unique_words) / total_words if total_words > 0 else 0
+
+    return {
+        'coherence_cv': coherence_cv,
+        'coherence_umass': coherence_umass,
+        'silhouette': silhouette,
+        'diversity': diversity,
+        'num_topics': len(topic_words),
+        'quality_grade': grade_quality(coherence_cv, silhouette, diversity)
+    }
+
+def grade_quality(coherence_cv, silhouette, diversity):
+    """Grade overall quality A-F."""
+    score = (coherence_cv * 0.4 + silhouette * 0.3 + diversity * 0.3)
+    if score > 0.6: return 'A'
+    if score > 0.5: return 'B'
+    if score > 0.4: return 'C'
+    if score > 0.3: return 'D'
+    return 'F'
+```
+
+#### Anomaly Detection Quality
+
+| Metric | Definition | Target | Notes |
+|--------|------------|--------|-------|
+| **Precision@k** | % of top-k anomalies that are true anomalies | >60% | Requires labeled data |
+| **Recall@k** | % of true anomalies in top-k | >80% | Prefer high recall |
+| **AUC-ROC** | Area under ROC curve | >0.85 | Overall discrimination |
+| **Contamination Stability** | Variance in anomaly % across runs | <5% | Reproducibility |
+
+#### Signal Detection Quality
+
+| Metric | Definition | Target | Notes |
+|--------|------------|--------|-------|
+| **PRR Calibration** | Correlation between PRR and actual defect rate | >0.6 | Backtesting |
+| **False Positive Rate** | % of signals that don't correspond to real issues | <30% | Manual review |
+| **Detection Latency** | Time from first complaint to signal | <90 days | Historical analysis |
+
+### Validation Strategy
+
+```mermaid
+graph TD
+    subgraph "Validation Pipeline"
+        A[New Model Version] --> B[Offline Evaluation]
+        B --> C{Metrics Pass?}
+        C -->|No| D[Reject]
+        C -->|Yes| E[Historical Backtesting]
+
+        E --> F{Recall Improvement?}
+        F -->|No| D
+        F -->|Yes| G[Shadow Deployment]
+
+        G --> H[Compare to Production]
+        H --> I{Better or Equal?}
+        I -->|No| D
+        I -->|Yes| J[Gradual Rollout]
+    end
+```
+
+### Backtesting Protocol
+
+To validate the system detects real patterns:
+
+1. **Historical Recall Matching**
+   - Take all recalls from 2020-2024
+   - Run pattern detection on complaints 30/60/90 days before recall
+   - Measure: What % of recalls would have been flagged?
+
+2. **Synthetic Injection**
+   - Inject known patterns into historical data
+   - Verify detection at various signal strengths
+   - Measure: Detection threshold sensitivity
+
+3. **A/B Evaluation**
+   - Compare new model vs. current production
+   - Measure: Incremental signals detected
+   - Human review of differences
+
+```python
+def backtest_recall_detection(model, complaints_df, recalls_df, days_before=30):
+    """
+    Backtest: Would we have detected these recalls?
+
+    Args:
+        model: Trained pattern detection model
+        complaints_df: Historical complaints with dates
+        recalls_df: Historical recalls with dates
+        days_before: Detection window
+
+    Returns:
+        Detection rate and details
+    """
+    results = []
+
+    for _, recall in recalls_df.iterrows():
+        recall_date = recall['date']
+        make = recall['make']
+        model_name = recall['model']
+        component = recall['component']
+
+        # Get complaints before recall
+        cutoff = recall_date - timedelta(days=days_before)
+        relevant_complaints = complaints_df[
+            (complaints_df['date'] < cutoff) &
+            (complaints_df['make'] == make) &
+            (complaints_df['model'] == model_name)
+        ]
+
+        # Run detection
+        if len(relevant_complaints) < 10:
+            detected = None  # Insufficient data
+        else:
+            patterns = model.detect(relevant_complaints)
+            # Check if any pattern matches recall component
+            detected = any(
+                component.lower() in p['keywords'].lower()
+                for p in patterns
+            )
+
+        results.append({
+            'recall_id': recall['id'],
+            'make_model': f"{make} {model_name}",
+            'component': component,
+            'complaints_before': len(relevant_complaints),
+            'detected': detected,
+            'days_before': days_before
+        })
+
+    # Calculate detection rate
+    valid_results = [r for r in results if r['detected'] is not None]
+    detection_rate = sum(r['detected'] for r in valid_results) / len(valid_results)
+
+    return {
+        'detection_rate': detection_rate,
+        'total_recalls': len(recalls_df),
+        'testable_recalls': len(valid_results),
+        'detected_count': sum(r['detected'] for r in valid_results),
+        'details': results
+    }
+```
+
+### Quality Gates
+
+Before any model goes to production:
+
+| Gate | Criteria | Automated? |
+|------|----------|------------|
+| **G1: Unit Tests** | All tests pass | Yes |
+| **G2: Coherence** | CV > 0.4, UMass > -2.0 | Yes |
+| **G3: Silhouette** | Score > 0.3 | Yes |
+| **G4: Backtest** | Recall detection > 50% | Yes |
+| **G5: Human Review** | Sample patterns interpretable | No |
+| **G6: No Regression** | Metrics >= production | Yes |
 
 ---
 
@@ -2150,7 +2371,8 @@ print(np.var(embeddings))  # Should be ~1.0
 
 ---
 
-*Document Version: 2.0 | Status: Ready for Review*
-*Total Sections: 12 main + 10 appendices*
-*Coverage: Architecture, Implementation, Operations, Security, Cost*
+*Document Version: 2.1 | Status: Ready for Principal Engineer Review*
+*Total Sections: 13 main + 10 appendices (~2400 lines)*
+*Coverage: Architecture, Implementation, Operations, Security, Cost, Evaluation*
+*Iteration: 2 - Added Success Metrics, Backtesting Protocol, Quality Gates*
 *Next Step: Principal engineer review and stakeholder sign-off*
