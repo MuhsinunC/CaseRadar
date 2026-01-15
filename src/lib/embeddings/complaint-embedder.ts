@@ -1,16 +1,23 @@
 /**
  * Complaint Embeddings Service
  * Generates and stores embeddings for complaint descriptions
+ *
+ * Uses the resilient embedding client which:
+ * - Tries the scalable embedding service first
+ * - Falls back to OpenAI/Ollama if scalable service is unavailable
+ * - Has circuit breaker pattern and retry logic
  */
 
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import {
-  generateEmbedding,
-  generateEmbeddingsBatched,
+  generateResilientEmbedding,
+  generateResilientEmbeddingsLarge,
   formatEmbeddingForPgvector,
-  cosineSimilarity,
-} from './openai';
+  getEmbeddingHealth,
+  getEmbeddingMetrics,
+} from './resilient-client';
+import { cosineSimilarity } from './openai';
 
 // Batch processing configuration
 const PROCESSING_BATCH_SIZE = 50;
@@ -58,7 +65,7 @@ export const complaintEmbedder = {
     }
 
     const text = prepareComplaintText(complaint);
-    const embedding = await generateEmbedding(text);
+    const embedding = await generateResilientEmbedding(text);
 
     // Update using raw SQL for pgvector
     await prisma.$executeRaw`
@@ -101,38 +108,34 @@ export const complaintEmbedder = {
     const errors: string[] = [];
     let processed = 0;
 
-    // Process in batches
-    for (let i = 0; i < complaints.length; i += PROCESSING_BATCH_SIZE) {
-      const batch = complaints.slice(i, i + PROCESSING_BATCH_SIZE);
-      const texts = batch.map(prepareComplaintText);
+    // Prepare all texts
+    const texts = complaints.map(prepareComplaintText);
 
-      try {
-        const { embeddings, errors: batchErrors } = await generateEmbeddingsBatched(texts);
-        errors.push(...batchErrors);
+    try {
+      // Use resilient client with progress tracking
+      const embeddings = await generateResilientEmbeddingsLarge(texts, (completed, total) => {
+        console.log(`Embedding progress: ${completed}/${total}`);
+      });
 
-        // Store embeddings
-        for (let j = 0; j < batch.length; j++) {
-          if (embeddings[j] && embeddings[j].length > 0) {
-            try {
-              await prisma.$executeRaw`
-                UPDATE "Complaint"
-                SET embedding = ${formatEmbeddingForPgvector(embeddings[j])}::vector
-                WHERE id = ${batch[j].id}
-              `;
-              processed++;
-            } catch (dbError) {
-              const msg = dbError instanceof Error ? dbError.message : String(dbError);
-              errors.push(`DB error for ${batch[j].id}: ${msg}`);
-            }
+      // Store embeddings
+      for (let i = 0; i < complaints.length; i++) {
+        if (embeddings[i] && embeddings[i].length > 0) {
+          try {
+            await prisma.$executeRaw`
+              UPDATE "Complaint"
+              SET embedding = ${formatEmbeddingForPgvector(embeddings[i])}::vector
+              WHERE id = ${complaints[i].id}
+            `;
+            processed++;
+          } catch (dbError) {
+            const msg = dbError instanceof Error ? dbError.message : String(dbError);
+            errors.push(`DB error for ${complaints[i].id}: ${msg}`);
           }
         }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        errors.push(`Batch ${Math.floor(i / PROCESSING_BATCH_SIZE)} failed: ${msg}`);
       }
-
-      // Rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 200));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`Embedding generation failed: ${msg}`);
     }
 
     return { processed, errors };
@@ -181,7 +184,7 @@ export const complaintEmbedder = {
     query: string,
     limit: number = 20
   ): Promise<Array<{ id: string; similarity: number }>> {
-    const queryEmbedding = await generateEmbedding(query);
+    const queryEmbedding = await generateResilientEmbedding(query);
     const vectorStr = formatEmbeddingForPgvector(queryEmbedding);
 
     const results = await prisma.$queryRaw<Array<{ id: string; distance: number }>>`
@@ -224,6 +227,20 @@ export const complaintEmbedder = {
       withoutEmbedding,
       percentComplete: Math.round(percentComplete * 10) / 10,
     };
+  },
+
+  /**
+   * Get embedding service health status
+   */
+  async getServiceHealth() {
+    return getEmbeddingHealth();
+  },
+
+  /**
+   * Get embedding service metrics
+   */
+  getServiceMetrics() {
+    return getEmbeddingMetrics();
   },
 };
 

@@ -8,25 +8,35 @@ import { prisma } from '@/lib/db';
 import { nhtsaClient } from './client';
 import { transformSODARecords, calculateSeverityScore } from './transformer';
 import { SyncStatus, TransformedComplaint } from './types';
-import { generateEmbedding, formatEmbeddingForPgvector, getModelInfo, checkEmbeddingService } from '@/lib/embeddings';
+import {
+  generateResilientEmbedding,
+  formatEmbeddingForPgvector,
+  getModelInfo,
+  getEmbeddingHealth,
+} from '@/lib/embeddings';
 
 // Batch size for database inserts
 const BATCH_SIZE = 50; // Smaller batches for embedding generation
 
-// Check if embeddings are enabled (require Ollama to be running)
+// Check if embeddings are enabled (scalable service or fallback)
 let embeddingsEnabled = false;
 
 /**
- * Initialize embedding service check
+ * Initialize embedding service check using resilient client
  */
 async function initEmbeddingService(): Promise<boolean> {
   try {
-    embeddingsEnabled = await checkEmbeddingService();
+    const health = await getEmbeddingHealth();
+    embeddingsEnabled = health.scalable.healthy || health.fallback.healthy;
+
     if (embeddingsEnabled) {
       const info = getModelInfo();
-      console.log(`Embedding service ready: ${info.provider}/${info.model} (${info.dimensions} dims)`);
+      const preferredService = health.scalable.healthy ? 'scalable' : 'fallback';
+      console.log(`Embedding service ready: ${preferredService} (${info.dimensions} dims)`);
+      console.log(`  Scalable: ${health.scalable.healthy ? 'healthy' : 'unavailable'} (circuit: ${health.scalable.circuitState})`);
+      console.log(`  Fallback: ${health.fallback.healthy ? 'healthy' : 'unavailable'}`);
     } else {
-      console.warn('Embedding service not available - complaints will be inserted without embeddings');
+      console.warn('No embedding service available - complaints will be inserted without embeddings');
     }
     return embeddingsEnabled;
   } catch {
@@ -149,7 +159,7 @@ export const nhtsaSyncService = {
         if (embeddingsEnabled) {
           try {
             const text = getEmbeddingText(c);
-            const embedding = await generateEmbedding(text);
+            const embedding = await generateResilientEmbedding(text);
             embeddingVector = formatEmbeddingForPgvector(embedding);
           } catch (error) {
             console.warn(`Embedding failed for complaint ${c.nhtsaId}:`, error);
@@ -386,7 +396,7 @@ export const nhtsaSyncService = {
           c.deaths > 0 ? `${c.deaths} deaths` : '',
         ].filter(Boolean).join(' | ');
 
-        const embedding = await generateEmbedding(text);
+        const embedding = await generateResilientEmbedding(text);
         const vectorStr = formatEmbeddingForPgvector(embedding);
 
         await prisma.$executeRaw`
