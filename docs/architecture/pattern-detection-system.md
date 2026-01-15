@@ -1,6 +1,6 @@
 # CaseRadar Pattern Detection System Architecture
 
-**Version:** 3.1
+**Version:** 3.2
 **Last Updated:** January 2025
 **Status:** Ready for Principal Engineer Review
 
@@ -22,7 +22,8 @@
 12. [Monitoring & Observability](#monitoring--observability)
 13. [Migration Strategy](#migration-strategy)
 14. [Architecture Decision Records](#architecture-decision-records)
-15. [References](#references)
+15. [Open Questions & Risks](#open-questions--risks)
+16. [References](#references)
 
 **Appendices:**
 - [A: Algorithm Quick Reference](#appendix-a-algorithm-quick-reference)
@@ -1904,6 +1905,46 @@ slack-notify "#ops" "ROLLBACK EXECUTED - Pattern detection reverted to v1"
 
 ---
 
+## Open Questions & Risks
+
+### Outstanding Questions (Require User Input)
+
+| # | Question | Impact | Default if Unanswered |
+|---|----------|--------|----------------------|
+| **Q1** | Should patterns auto-generate alerts, or require manual review first? | UX, alert fatigue | Manual review for v1 |
+| **Q2** | What PRR threshold is acceptable for "strong signal"? (2.0 proposed) | Sensitivity/specificity | 2.0 (FDA standard) |
+| **Q3** | Should we preserve OpenAI embeddings or migrate to sentence-transformers? | Cost vs complexity | Keep OpenAI for now |
+| **Q4** | How many historical recalls do we have for backtesting? | Validation quality | Proceed with available |
+| **Q5** | Is 24-hour latency acceptable, or do attorneys need faster? | Architecture (batch vs stream) | Batch is sufficient |
+
+### Known Technical Risks
+
+| Risk | Likelihood | Impact | Mitigation | Owner |
+|------|------------|--------|------------|-------|
+| **BERTopic memory usage** on 100K+ docs | Medium | Pipeline failure | Use incremental mode, increase RAM | TBD |
+| **Topic coherence degradation** over time | Medium | Poor interpretability | Periodic retraining, monitoring | TBD |
+| **OpenAI embedding API rate limits** | Low | Slow backfill | Batch with delays, consider local | TBD |
+| **Simpson's paradox masking signals** | Medium | Missed patterns | Stratified analysis by default | TBD |
+| **Model drift without retraining** | High | Stale patterns | Scheduled retraining, drift detection | TBD |
+
+### Deferred Decisions (Revisit Later)
+
+| Decision | Deferral Reason | Revisit Trigger |
+|----------|-----------------|-----------------|
+| **Streaming architecture** | Not needed at current scale | If latency SLA drops to <1 hour |
+| **GPU acceleration** | CPU sufficient for 100K | If embedding throughput <500/sec |
+| **Knowledge graph integration** | Higher complexity | If multi-theme analysis becomes priority |
+| **BERTrend adoption** | Research-only, not production-ready | When stable release available |
+
+### Unknowns We're Accepting
+
+1. **Optimal HDBSCAN parameters** - Will be tuned empirically after initial deployment
+2. **Actual recall detection rate** - Backtesting will validate; 50% target may be optimistic
+3. **Attorney adoption** - UX research needed to understand workflow integration
+4. **Long-term cost trajectory** - OpenAI pricing may change; budget flexibility needed
+
+---
+
 ## References
 
 ### Primary Sources
@@ -3409,14 +3450,15 @@ async def run_pipeline(complaints):
 
 ---
 
-*Document Version: 3.1 | Status: Ready for Principal Engineer Review*
-*Total Sections: 15 main + 11 appendices (3,422 lines)*
-*Coverage: Architecture, Implementation, Migration, ADRs, Operations, Security, Cost, Evaluation, Edge Cases*
-*Iteration: 4 - Added Quick Reference, Scope & Non-Goals, Dependencies*
+*Document Version: 3.2 | Status: Ready for Principal Engineer Review*
+*Total Sections: 16 main + 11 appendices (~3,500 lines)*
+*Coverage: Architecture, Implementation, Migration, ADRs, Risks, Operations, Security, Cost, Evaluation, Edge Cases*
+*Iteration: 5 - Added Open Questions & Risks section*
 *Changelog:*
 - *v1.0: Initial architecture draft*
 - *v2.0: Added Success Metrics, Backtesting Protocol, Quality Gates*
 - *v2.1: Added operational appendices (Cost, Testing, API, Runbook)*
 - *v3.0: Added Migration Strategy, 6 ADRs, Edge Cases appendix*
 - *v3.1: Added TL;DR Quick Reference, Scope & Non-Goals, Dependency diagram*
+- *v3.2: Added Open Questions & Risks section (5 questions, 5 risks, 4 deferred decisions)*
 *Next Step: Principal engineer review and stakeholder sign-off*
