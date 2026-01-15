@@ -10,7 +10,7 @@ import { prisma } from '@/lib/db';
 import { recallsClient } from './recalls-client';
 import { RecallSyncStatus, TransformedRecall, RecallsByVehicleParams } from './types';
 import { generateEmbedding, formatEmbeddingForPgvector, checkEmbeddingService } from '@/lib/embeddings';
-import { getRecallEmbeddingText } from '@/lib/patterns/semantic-matching';
+import { getRecallEmbeddingText, findSemanticRecallMatches } from '@/lib/patterns/semantic-matching';
 
 // Rate limiting delay (ms)
 const REQUEST_DELAY = 250;
@@ -259,8 +259,9 @@ export const recallsSyncService = {
   },
 
   /**
-   * Cross-reference patterns with recalls
+   * Cross-reference patterns with recalls using SEMANTIC MATCHING
    * This is the core function that identifies which patterns have related recalls
+   * Uses embedding similarity to determine if recalls actually address the pattern
    */
   async crossReferencePatterns(): Promise<{
     patternsChecked: number;
@@ -279,85 +280,55 @@ export const recallsSyncService = {
         where: { isActive: true },
         select: {
           id: true,
-          make: true,
-          model: true,
-          component: true,
-          yearStart: true,
-          yearEnd: true,
+          name: true,
         },
       });
 
-      // Get all recalls
-      const recalls = await prisma.recall.findMany();
-      const transformedRecalls: TransformedRecall[] = recalls.map((r) => ({
-        nhtsaCampaignNumber: r.nhtsaCampaignNumber,
-        manufacturer: r.manufacturer,
-        make: r.make,
-        model: r.model,
-        year: r.year,
-        component: r.component,
-        summary: r.summary,
-        consequence: r.consequence,
-        remedy: r.remedy,
-        notes: r.notes,
-        reportReceivedDate: r.reportReceivedDate,
-        parkIt: r.parkIt,
-        parkOutside: r.parkOutside,
-      }));
-
-      console.log(`Cross-referencing ${patterns.length} patterns with ${recalls.length} recalls`);
+      console.log(`Cross-referencing ${patterns.length} patterns using SEMANTIC MATCHING`);
 
       for (const pattern of patterns) {
         patternsChecked++;
 
-        const relatedRecalls = recallsClient.findRelatedRecalls(
-          pattern.make,
-          pattern.model,
-          pattern.component,
-          pattern.yearStart,
-          pattern.yearEnd,
-          transformedRecalls
-        );
+        try {
+          // Use semantic matching to find related recalls
+          // This compares pattern's complaint embeddings with recall embeddings
+          const semanticMatches = await findSemanticRecallMatches(pattern.id, 0.5);
 
-        if (relatedRecalls.length > 0) {
-          patternsWithRecalls++;
+          if (semanticMatches.length > 0) {
+            patternsWithRecalls++;
 
-          // Create pattern-recall links
-          for (const match of relatedRecalls) {
-            try {
-              // Get recall ID from database
-              const recallRecord = await prisma.recall.findUnique({
-                where: { nhtsaCampaignNumber: match.recall.nhtsaCampaignNumber },
-                select: { id: true },
-              });
-
-              if (recallRecord) {
-                // Upsert the link
+            // Create pattern-recall links with semantic scores
+            for (const match of semanticMatches) {
+              try {
+                // Upsert the link with semantic match score
                 await prisma.patternRecall.upsert({
                   where: {
                     patternId_recallId: {
                       patternId: pattern.id,
-                      recallId: recallRecord.id,
+                      recallId: match.recallId,
                     },
                   },
                   create: {
                     patternId: pattern.id,
-                    recallId: recallRecord.id,
-                    matchScore: match.matchScore,
-                    matchReason: match.matchReason,
+                    recallId: match.recallId,
+                    matchScore: match.semanticScore,
+                    matchReason: `Semantic similarity: ${(match.semanticScore * 100).toFixed(1)}%`,
                   },
                   update: {
-                    matchScore: match.matchScore,
-                    matchReason: match.matchReason,
+                    matchScore: match.semanticScore,
+                    matchReason: `Semantic similarity: ${(match.semanticScore * 100).toFixed(1)}%`,
                   },
                 });
                 linksCreated++;
+              } catch (error) {
+                const msg = `Failed to link pattern ${pattern.id} to recall ${match.recall.nhtsaCampaignNumber}: ${error}`;
+                errors.push(msg);
               }
-            } catch (error) {
-              const msg = `Failed to link pattern ${pattern.id} to recall ${match.recall.nhtsaCampaignNumber}: ${error}`;
-              errors.push(msg);
             }
           }
+        } catch (patternError) {
+          // Skip patterns without embeddings (no complaints with embeddings)
+          console.warn(`Skipping pattern ${pattern.name} - no embeddings available`);
         }
       }
 

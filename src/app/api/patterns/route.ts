@@ -143,6 +143,7 @@ export async function GET(request: NextRequest) {
         complaintCount: patternCounts.complaints,
         recallCount: patternCounts.recalls,
         hasRecall: patternCounts.recalls > 0,
+        hasSemanticMatch: avgSemanticMatch > 0, // True if semantic matching found any recalls
         avgSemanticMatch: avgSemanticMatch === -1 ? null : avgSemanticMatch,
         leadScore: leadResult.score,
         leadBreakdown: leadResult.breakdown,

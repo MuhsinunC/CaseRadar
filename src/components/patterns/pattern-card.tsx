@@ -227,6 +227,38 @@ export function PatternCard({
               </Tooltip>
             </TooltipProvider>
           )}
+          {/* Semantic Match Score display */}
+          {pattern.avgSemanticMatch !== null && pattern.avgSemanticMatch !== undefined && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    data-testid="semantic-match-badge"
+                    variant="outline"
+                    className={cn(
+                      'flex items-center gap-1 cursor-help',
+                      pattern.avgSemanticMatch >= 0.7 ? 'border-green-500 text-green-600' :
+                      pattern.avgSemanticMatch >= 0.5 ? 'border-amber-500 text-amber-600' :
+                      'border-red-500 text-red-600'
+                    )}
+                  >
+                    <Info className="h-3 w-3" />
+                    Match: {(pattern.avgSemanticMatch * 100).toFixed(0)}%
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="font-medium mb-1">Semantic Match Score: {(pattern.avgSemanticMatch * 100).toFixed(1)}%</p>
+                  <p className="text-xs text-muted-foreground">
+                    This score measures how well linked NHTSA recalls semantically
+                    match this pattern&apos;s complaints using AI embeddings.
+                    Higher scores mean recalls closely address the reported issues.
+                    Lower scores (&lt;50%) may indicate the recalls don&apos;t fully
+                    address the problem - a potential lead for investigation.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {/* Lead Score indicator with tooltip */}
           {pattern.leadScore !== undefined && (
             <TooltipProvider>
