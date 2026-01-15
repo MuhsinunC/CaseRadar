@@ -40,6 +40,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/nextjs": "^10.32.1",
+    "@types/unzipper": "^0.10.11",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -56,6 +57,7 @@
     "stripe": "^20.1.2",
     "svix": "^1.84.1",
     "tailwind-merge": "^3.4.0",
+    "unzipper": "^0.12.3",
     "zod": "^4.3.5"
   },
   "devDependencies": {
