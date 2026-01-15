@@ -1,6 +1,6 @@
 # CaseRadar Pattern Detection System Architecture
 
-**Version:** 2.1
+**Version:** 3.1
 **Last Updated:** January 2025
 **Status:** Ready for Principal Engineer Review
 
