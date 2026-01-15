@@ -20,7 +20,9 @@
 10. [Phased Implementation Plan](#phased-implementation-plan)
 11. [Success Metrics & Evaluation](#success-metrics--evaluation)
 12. [Monitoring & Observability](#monitoring--observability)
-13. [References](#references)
+13. [Migration Strategy](#migration-strategy)
+14. [Architecture Decision Records](#architecture-decision-records)
+15. [References](#references)
 
 **Appendices:**
 - [A: Algorithm Quick Reference](#appendix-a-algorithm-quick-reference)
@@ -33,10 +35,31 @@
 - [H: Security Considerations](#appendix-h-security-considerations)
 - [I: SLA & Disaster Recovery](#appendix-i-sla--disaster-recovery)
 - [J: On-Call Runbook](#appendix-j-on-call-runbook)
+- [K: Edge Cases & Boundary Conditions](#appendix-k-edge-cases--boundary-conditions)
 
 ---
 
 ## Executive Summary
+
+### Quick Reference (TL;DR)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  CaseRadar Pattern Detection - Technology Stack Summary             │
+├─────────────────────────────────────────────────────────────────────┤
+│  Topic Modeling:     BERTopic + HDBSCAN (auto-clusters, temporal)   │
+│  Anomaly Detection:  PyOD ensemble (IF + LOF + HBOS)                │
+│  Change Detection:   Ruptures PELT (O(n) complexity)                │
+│  Signal Detection:   PRR (threshold 2.0) + EBGM backup              │
+│  Embeddings:         sentence-transformers (all-mpnet-base-v2)      │
+│  Storage:            PostgreSQL + pgvector                          │
+│  Architecture:       Batch-first (nightly), not streaming           │
+│  Cost:               ~$90-150/month at 100K complaints              │
+│  Latency:            <24 hours from complaint to pattern inclusion  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Overview
 
 CaseRadar requires a pattern detection system to identify emerging vehicle defects, anomalies, and trends from NHTSA complaint data (currently 17K+ records, scaling to 100K+). This document provides a comprehensive architectural blueprint based on:
 
@@ -90,6 +113,59 @@ Law firms specializing in automotive product liability need to:
 - **Team**: Small engineering team; operational simplicity valued
 - **Integration**: Must work with existing PostgreSQL + Prisma stack
 - **Compute**: Standard cloud instances (no GPU required for MVP)
+
+### Scope & Non-Goals
+
+#### In Scope (This Document)
+
+| Area | Coverage |
+|------|----------|
+| Pattern detection algorithms | Detailed comparison, selection rationale, configuration |
+| System architecture | Data flow, component design, integration points |
+| Migration strategy | Current → proposed, phased rollout, rollback |
+| Operations | Monitoring, alerting, runbooks, disaster recovery |
+| Evaluation | Success metrics, backtesting, quality gates |
+
+#### Out of Scope (Separate Documents)
+
+| Area | Reason |
+|------|--------|
+| **Frontend implementation** | Covered by UI/UX design docs; this focuses on backend ML |
+| **Infrastructure provisioning** | Covered by DevOps runbooks (Terraform, K8s manifests) |
+| **NHTSA API integration** | Already implemented; sync service exists |
+| **User authentication/authorization** | Orthogonal to pattern detection |
+| **Complaint generation (GPT)** | Separate feature; consumes patterns, doesn't create them |
+| **Legal workflow integration** | Business process, not technical architecture |
+
+#### Assumptions
+
+1. **Embeddings already exist** - Current system generates OpenAI embeddings
+2. **pgvector configured** - Vector storage already operational
+3. **Complaints normalized** - Text cleaning/normalization handled upstream
+4. **Daily sync operational** - NHTSA data flows into system reliably
+
+#### Dependencies
+
+```mermaid
+graph LR
+    subgraph "External Dependencies"
+        A[NHTSA API] --> B[Pattern Detection]
+        C[OpenAI API] -.-> B
+        D[sentence-transformers] --> B
+    end
+
+    subgraph "Internal Dependencies"
+        E[PostgreSQL] --> B
+        F[pgvector] --> B
+        G[Redis/BullMQ] --> B
+    end
+
+    subgraph "Consumes Our Output"
+        B --> H[Dashboard UI]
+        B --> I[Alert System]
+        B --> J[Complaint Generator]
+    end
+```
 
 ---
 
@@ -1299,6 +1375,535 @@ async def health_check():
 
 ---
 
+## Migration Strategy
+
+### Current Implementation Analysis
+
+The existing CaseRadar pattern detection uses a **greedy clustering algorithm** implemented in TypeScript:
+
+```typescript
+// Current: src/lib/analysis/clustering.ts
+const DEFAULT_CONFIG = {
+  minClusterSize: 5,
+  similarityThreshold: 0.75,  // Cosine similarity cutoff
+  maxIterations: 100
+};
+
+function groupIntoClusters(embeddings, config) {
+  // 1. Pick first unassigned as centroid
+  // 2. Assign all within threshold to cluster
+  // 3. Repeat until all assigned or max iterations
+}
+```
+
+#### Current State Assessment
+
+| Aspect | Current Implementation | Limitation |
+|--------|----------------------|------------|
+| **Algorithm** | Greedy centroid-based | Order-dependent, suboptimal clusters |
+| **Similarity** | Fixed threshold (0.75) | No density awareness, misses varied clusters |
+| **Noise Handling** | None | Every complaint forced into a cluster |
+| **Temporal** | None | No tracking of topic evolution |
+| **Anomaly Detection** | None | No outlier identification |
+| **Interpretability** | Manual labels required | No auto-generated topic names |
+| **Embeddings** | OpenAI text-embedding-3-small | Good quality, API cost |
+| **Storage** | pgvector | ✓ Good - keep |
+
+### Comparison: Current vs. Proposed
+
+```mermaid
+graph LR
+    subgraph "Current Architecture"
+        A1[Complaints] --> B1[OpenAI Embedding]
+        B1 --> C1[Greedy Clustering]
+        C1 --> D1[Manual Pattern Labels]
+        D1 --> E1[Static Display]
+    end
+
+    subgraph "Proposed Architecture"
+        A2[Complaints] --> B2[sentence-transformers<br/>or OpenAI]
+        B2 --> C2[UMAP Reduction]
+        C2 --> D2[HDBSCAN Clustering]
+        D2 --> E2[c-TF-IDF Labels]
+        E2 --> F2[BERTopic Model]
+
+        B2 --> G2[PyOD Ensemble]
+        G2 --> H2[Anomaly Scores]
+
+        F2 --> I2[topics_over_time]
+        I2 --> J2[Temporal Tracking]
+
+        F2 --> K2[Ruptures PELT]
+        K2 --> L2[Change Points]
+
+        F2 --> M2[PRR/EBGM]
+        M2 --> N2[Signal Detection]
+    end
+```
+
+### Migration Path
+
+#### Phase 0: Preparation (1 week)
+
+**Goal**: Set up infrastructure without changing production
+
+```mermaid
+graph TD
+    A[Create Python Service] --> B[Set up FastAPI]
+    B --> C[Configure job queue]
+    C --> D[Add monitoring]
+    D --> E[Shadow mode testing]
+```
+
+**Tasks**:
+- [ ] Create `services/pattern-detection/` Python service
+- [ ] Configure Redis/BullMQ for job scheduling
+- [ ] Set up Prometheus metrics endpoints
+- [ ] Create shadow endpoint that runs in parallel with current
+
+**Risk**: Low - no production changes
+
+#### Phase 1: Dual-Write Mode (2 weeks)
+
+**Goal**: Run both systems in parallel, compare outputs
+
+```mermaid
+graph TD
+    subgraph "Dual-Write Architecture"
+        A[NHTSA Sync] --> B[Embedding Generation]
+        B --> C[Write to pgvector]
+
+        C --> D[Current: Greedy Clustering]
+        C --> E[New: BERTopic + HDBSCAN]
+
+        D --> F[(Current Patterns Table)]
+        E --> G[(New Patterns Table v2)]
+
+        F --> H[Comparison Service]
+        G --> H
+
+        H --> I[Metrics Dashboard]
+    end
+```
+
+**Comparison Metrics**:
+
+| Metric | Purpose | Target |
+|--------|---------|--------|
+| Cluster count | Granularity comparison | New within 50% of current |
+| Silhouette score | Cluster quality | New > Current |
+| Topic coherence | Interpretability | CV > 0.4 |
+| Coverage | % complaints in clusters | New >= Current |
+| Stability | Run-to-run variance | New < Current |
+
+**Migration Script**:
+
+```python
+async def run_dual_mode_comparison():
+    """Compare current vs. new pattern detection."""
+    complaints = await fetch_all_complaints_with_embeddings()
+
+    # Run current algorithm
+    current_start = time.time()
+    current_patterns = run_greedy_clustering(complaints)
+    current_time = time.time() - current_start
+
+    # Run new algorithm
+    new_start = time.time()
+    new_patterns = run_bertopic_pipeline(complaints)
+    new_time = time.time() - new_start
+
+    # Compare
+    comparison = {
+        'current': {
+            'pattern_count': len(current_patterns),
+            'time_seconds': current_time,
+            'avg_cluster_size': np.mean([p['count'] for p in current_patterns]),
+            'noise_complaints': 0,  # Current has no noise handling
+        },
+        'new': {
+            'pattern_count': len(new_patterns),
+            'time_seconds': new_time,
+            'avg_cluster_size': np.mean([p['count'] for p in new_patterns]),
+            'noise_complaints': count_noise_assignments(new_patterns),
+            'coherence_cv': calculate_coherence(new_patterns),
+            'silhouette': calculate_silhouette(new_patterns),
+        }
+    }
+
+    # Log for analysis
+    logger.info(f"Dual-mode comparison: {json.dumps(comparison)}")
+
+    return comparison
+```
+
+**Exit Criteria for Phase 1**:
+- [ ] New system silhouette score > current
+- [ ] Coherence CV > 0.4
+- [ ] Processing time within 2x of current
+- [ ] No data loss during migration
+- [ ] 2 weeks of stable parallel operation
+
+#### Phase 2: Feature Parity (1 week)
+
+**Goal**: New system supports all current features plus new capabilities
+
+**API Mapping**:
+
+| Current Endpoint | New Endpoint | Changes |
+|------------------|--------------|---------|
+| `GET /api/patterns` | `GET /api/patterns` | Add `source=v2` param |
+| `GET /api/patterns/:id` | `GET /api/patterns/:id` | Add temporal data |
+| N/A | `GET /api/anomalies` | New endpoint |
+| N/A | `GET /api/signals` | New endpoint |
+| N/A | `GET /api/trends` | New endpoint |
+
+**Database Schema Migration**:
+
+```sql
+-- Add new columns to patterns table
+ALTER TABLE patterns ADD COLUMN IF NOT EXISTS topic_words TEXT[];
+ALTER TABLE patterns ADD COLUMN IF NOT EXISTS coherence_score FLOAT;
+ALTER TABLE patterns ADD COLUMN IF NOT EXISTS bertopic_id INTEGER;
+
+-- Create new tables
+CREATE TABLE IF NOT EXISTS anomaly_scores (
+    complaint_id TEXT PRIMARY KEY REFERENCES complaints(id),
+    isolation_forest_score FLOAT,
+    lof_score FLOAT,
+    ensemble_score FLOAT,
+    is_anomaly BOOLEAN,
+    detected_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS safety_signals (
+    id TEXT PRIMARY KEY,
+    component TEXT NOT NULL,
+    make TEXT,
+    model TEXT,
+    prr FLOAT,
+    prr_ci_lower FLOAT,
+    ebgm FLOAT,
+    strength TEXT CHECK (strength IN ('strong', 'weak', 'noise')),
+    complaint_count INTEGER,
+    detected_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS change_points (
+    id TEXT PRIMARY KEY,
+    pattern_id TEXT REFERENCES patterns(id),
+    change_date DATE NOT NULL,
+    change_type TEXT CHECK (change_type IN ('increase', 'decrease')),
+    magnitude FLOAT,
+    detected_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### Phase 3: Cutover (1 week)
+
+**Goal**: Switch production to new system
+
+```mermaid
+graph TD
+    subgraph "Cutover Sequence"
+        A[Announce maintenance window] --> B[Take final backup]
+        B --> C[Pause NHTSA sync]
+        C --> D[Run final comparison]
+
+        D --> E{Metrics OK?}
+        E -->|Yes| F[Switch API to v2]
+        E -->|No| G[Abort, investigate]
+
+        F --> H[Resume NHTSA sync]
+        H --> I[Monitor 4 hours]
+
+        I --> J{Errors?}
+        J -->|Yes| K[Rollback to v1]
+        J -->|No| L[Migration complete]
+
+        K --> M[Post-mortem]
+    end
+```
+
+**Cutover Checklist**:
+
+```markdown
+## Pre-Cutover
+- [ ] All dual-mode metrics passing
+- [ ] Runbook reviewed by on-call
+- [ ] Rollback procedure tested
+- [ ] Stakeholders notified
+- [ ] Backup verified
+
+## During Cutover
+- [ ] NHTSA sync paused
+- [ ] Final data snapshot taken
+- [ ] API version switched
+- [ ] Health checks passing
+- [ ] NHTSA sync resumed
+
+## Post-Cutover (4-hour watch)
+- [ ] Pattern counts normal
+- [ ] API latency normal
+- [ ] No error spikes
+- [ ] User-facing features working
+- [ ] Stakeholder sign-off
+
+## Post-Migration (1 week)
+- [ ] Deprecate v1 endpoints
+- [ ] Remove old code
+- [ ] Archive v1 patterns table
+- [ ] Update documentation
+- [ ] Team knowledge transfer
+```
+
+#### Phase 4: Deprecation (2 weeks)
+
+**Goal**: Remove legacy code, complete migration
+
+**Tasks**:
+- [ ] Remove `src/lib/analysis/clustering.ts`
+- [ ] Archive `patterns_v1` table
+- [ ] Update all documentation
+- [ ] Decommission dual-write infrastructure
+
+### Rollback Plan
+
+```mermaid
+graph TD
+    subgraph "Rollback Decision Tree"
+        A[Issue Detected] --> B{Severity?}
+
+        B -->|P1: Data loss/corruption| C[Immediate Rollback]
+        B -->|P2: Degraded performance| D[Assess impact]
+        B -->|P3: Minor issues| E[Fix forward]
+
+        C --> F[Switch API to v1]
+        F --> G[Pause v2 processing]
+        G --> H[Restore from backup if needed]
+        H --> I[Post-mortem]
+
+        D --> J{Fixable in <1hr?}
+        J -->|Yes| K[Hot fix]
+        J -->|No| C
+
+        E --> L[Create ticket]
+        L --> M[Fix in next release]
+    end
+```
+
+**Rollback Commands**:
+
+```bash
+# Emergency rollback
+kubectl set image deployment/api api=caseradar/api:v1-stable
+kubectl rollout status deployment/api
+
+# Verify rollback
+curl -s https://api.caseradar.com/health | jq '.version'
+# Should show v1
+
+# Pause v2 workers
+kubectl scale deployment pattern-worker-v2 --replicas=0
+
+# Notify team
+slack-notify "#ops" "ROLLBACK EXECUTED - Pattern detection reverted to v1"
+```
+
+### Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Pattern quality regression | Medium | High | Extensive dual-mode testing |
+| Performance degradation | Low | Medium | Benchmark before cutover |
+| Data inconsistency | Low | High | Database migrations tested |
+| API compatibility break | Medium | High | Versioned endpoints |
+| Team knowledge gap | Medium | Medium | Documentation + training |
+
+---
+
+## Architecture Decision Records
+
+### ADR-001: BERTopic over LDA for Topic Modeling
+
+**Status**: Accepted
+
+**Context**: Need to cluster 17K+ NHTSA complaints into interpretable topics with temporal tracking.
+
+**Decision**: Use BERTopic with HDBSCAN instead of traditional LDA.
+
+**Rationale**:
+1. **+34% accuracy improvement** over LDA in benchmark studies (Egger & Yu, 2022)
+2. **Automatic topic count** - HDBSCAN determines clusters; no need to tune K
+3. **Native temporal tracking** - `topics_over_time()` built-in
+4. **Better on short text** - Complaint summaries average 50-200 words
+5. **Interpretable labels** - c-TF-IDF generates human-readable topic names
+
+**Alternatives Considered**:
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| LDA | Requires tuning K, poor on short text, no temporal |
+| Top2Vec | Limited temporal tracking, slower than BERTopic |
+| K-Means | Requires K, poor on varying density clusters |
+
+**Consequences**:
+- Requires Python service (BERTopic not in JS/TS)
+- Higher memory usage than LDA
+- Need UMAP for dimensionality reduction
+
+---
+
+### ADR-002: PyOD Ensemble over Single Anomaly Detector
+
+**Status**: Accepted
+
+**Context**: Need to identify unusual complaints that may indicate emerging issues.
+
+**Decision**: Use ensemble of Isolation Forest + LOF + HBOS via PyOD.
+
+**Rationale**:
+1. **Complementary detection** - IF for global, LOF for local density, HBOS for speed
+2. **Robustness** - No single algorithm performs best across all anomaly types
+3. **Interpretability** - Can explain which detector flagged complaint
+4. **Flexibility** - Easy to add/remove detectors
+
+**Alternatives Considered**:
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Isolation Forest only | Misses local density anomalies |
+| Deep learning (AutoEncoder) | Overkill for our scale, less interpretable |
+| Statistical (Z-score) | Assumes normal distribution, doesn't hold for embeddings |
+
+**Consequences**:
+- Slightly higher latency (3 models vs 1)
+- Need to calibrate ensemble weighting
+- Score interpretation requires documentation
+
+---
+
+### ADR-003: Batch-First Architecture over Streaming
+
+**Status**: Accepted
+
+**Context**: Should pattern detection run on demand, nightly batch, or real-time streaming?
+
+**Decision**: Implement nightly batch processing; defer streaming to future phase.
+
+**Rationale**:
+1. **Simplicity** - Batch is 10x simpler to implement and debug
+2. **Cost** - No always-on streaming infrastructure
+3. **Sufficient for use case** - Legal discovery doesn't need sub-minute latency
+4. **Data characteristics** - NHTSA updates daily, not real-time
+5. **80/20 rule** - Batch delivers 90% of value with 20% of complexity
+
+**Alternatives Considered**:
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Real-time streaming (River) | Adds complexity without proportional benefit |
+| On-demand only | Misses background trend detection |
+| Hybrid (batch + stream) | Premature optimization |
+
+**Consequences**:
+- Patterns may be up to 24 hours stale
+- No instant alerting on new complaints
+- Will need to revisit if latency requirements change
+
+---
+
+### ADR-004: Sentence-Transformers over OpenAI Embeddings for Default
+
+**Status**: Accepted
+
+**Context**: Choose embedding model for complaint vectorization.
+
+**Decision**: Default to `all-mpnet-base-v2` (sentence-transformers); allow OpenAI as configurable option.
+
+**Rationale**:
+1. **Cost** - Free vs $0.02-0.13/1M tokens
+2. **Privacy** - No data sent to third party
+3. **Quality** - 768-dim mpnet is comparable to OpenAI small
+4. **Control** - Self-hosted, no API rate limits
+5. **Speed** - Local inference faster than API calls
+
+**Alternatives Considered**:
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| OpenAI only | API costs, privacy concerns, rate limits |
+| MiniLM-L6 | Lower quality (384-dim) |
+| Cohere | Similar cost to OpenAI, less common |
+
+**Consequences**:
+- Requires local model loading (~500MB)
+- May need GPU for high throughput
+- OpenAI option remains for quality-sensitive use cases
+
+---
+
+### ADR-005: PRR as Primary Signal Detection Metric
+
+**Status**: Accepted
+
+**Context**: Choose statistical method for detecting disproportionate complaint rates.
+
+**Decision**: Use Proportional Reporting Ratio (PRR) with threshold 2.0 as primary metric; EBGM as secondary.
+
+**Rationale**:
+1. **Interpretability** - PRR is intuitive: "2x more complaints than expected"
+2. **Sensitivity** - Higher recall than EBGM (38% vs 0.9% per FDA benchmarks)
+3. **Simplicity** - Frequentist calculation vs Bayesian EBGM
+4. **Legal context** - False negatives (missed cases) more costly than false positives
+5. **Prior art** - FDA uses PRR for initial screening, EBGM for confirmation
+
+**Alternatives Considered**:
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| EBGM only | Too conservative (0.9% sensitivity), may miss early signals |
+| Logistic regression | Requires labeled training data we don't have |
+| Pure ML classifier | Less interpretable for legal context |
+
+**Consequences**:
+- Higher false positive rate than EBGM
+- Need human review layer for strong signals
+- Should implement EBGM as secondary check for production
+
+---
+
+### ADR-006: PostgreSQL + pgvector over Dedicated Vector Database
+
+**Status**: Accepted
+
+**Context**: Choose storage for complaint embeddings.
+
+**Decision**: Use pgvector extension in existing PostgreSQL.
+
+**Rationale**:
+1. **Operational simplicity** - One database to manage
+2. **Transactional consistency** - Embeddings updated atomically with complaints
+3. **Cost** - No additional infrastructure
+4. **Scale fit** - pgvector handles 1M+ vectors, sufficient for our 100K target
+5. **Query patterns** - Our queries are mostly exact match + top-K, not complex ANN
+
+**Alternatives Considered**:
+
+| Alternative | Why Rejected |
+|-------------|--------------|
+| Pinecone | Additional cost and vendor dependency |
+| Milvus | Operational overhead, overkill for scale |
+| Weaviate | Similar concerns, plus schema rigidity |
+| FAISS (local) | No persistence, harder to integrate |
+
+**Consequences**:
+- Vector ops limited to pgvector capabilities
+- May need to migrate if hitting performance limits at >1M vectors
+- Need to tune `ivfflat` index parameters
+
+---
+
 ## References
 
 ### Primary Sources
@@ -2371,8 +2976,447 @@ print(np.var(embeddings))  # Should be ~1.0
 
 ---
 
-*Document Version: 2.1 | Status: Ready for Principal Engineer Review*
-*Total Sections: 13 main + 10 appendices (~2400 lines)*
-*Coverage: Architecture, Implementation, Operations, Security, Cost, Evaluation*
-*Iteration: 2 - Added Success Metrics, Backtesting Protocol, Quality Gates*
+## Appendix K: Edge Cases & Boundary Conditions
+
+### Data Edge Cases
+
+#### 1. Empty or Near-Empty Corpus
+
+**Scenario**: First run with <50 complaints
+
+**Behavior**:
+- BERTopic requires minimum data for meaningful clusters
+- HDBSCAN may assign all to noise (-1)
+- PRR calculations become statistically meaningless
+
+**Mitigation**:
+```python
+def check_minimum_data(complaints: list) -> bool:
+    MIN_COMPLAINTS = 100
+    if len(complaints) < MIN_COMPLAINTS:
+        logger.warning(f"Insufficient data ({len(complaints)} < {MIN_COMPLAINTS})")
+        return False
+    return True
+
+# Graceful degradation
+if not check_minimum_data(complaints):
+    return {
+        'patterns': [],
+        'message': 'Insufficient data for pattern detection',
+        'recommendation': 'Wait for more complaints to accumulate'
+    }
+```
+
+#### 2. Single Dominant Topic
+
+**Scenario**: 80%+ complaints about one issue (e.g., recall event)
+
+**Behavior**:
+- Most complaints cluster into 1-2 topics
+- Other patterns drowned out
+- Anomaly detection skewed
+
+**Mitigation**:
+```python
+def detect_topic_dominance(topic_model, threshold=0.5):
+    """Detect if single topic dominates corpus."""
+    topic_info = topic_model.get_topic_info()
+    total = topic_info['Count'].sum()
+    max_topic = topic_info[topic_info['Topic'] != -1]['Count'].max()
+
+    if max_topic / total > threshold:
+        return {
+            'dominant_topic': topic_info[topic_info['Count'] == max_topic].iloc[0],
+            'percentage': max_topic / total,
+            'recommendation': 'Consider excluding known recall events or increasing min_topic_size'
+        }
+    return None
+```
+
+#### 3. All Complaints Identical/Near-Identical
+
+**Scenario**: Copy-paste complaints or form submissions
+
+**Behavior**:
+- Zero variance in embeddings
+- Clustering produces single cluster or fails
+- No meaningful patterns
+
+**Mitigation**:
+```python
+def detect_duplicate_embeddings(embeddings, threshold=0.99):
+    """Detect near-duplicate complaints."""
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    # Sample pairwise similarities
+    sample_idx = np.random.choice(len(embeddings), min(1000, len(embeddings)), replace=False)
+    sample = embeddings[sample_idx]
+    sim_matrix = cosine_similarity(sample)
+
+    # Count high-similarity pairs (excluding self-similarity)
+    np.fill_diagonal(sim_matrix, 0)
+    duplicate_pairs = (sim_matrix > threshold).sum() / 2
+    duplicate_rate = duplicate_pairs / (len(sample) * (len(sample) - 1) / 2)
+
+    if duplicate_rate > 0.1:  # >10% duplicates
+        logger.warning(f"High duplicate rate detected: {duplicate_rate:.2%}")
+        return True
+    return False
+```
+
+#### 4. Extreme Text Lengths
+
+**Scenario**: Complaints range from 3 words to 10,000 words
+
+**Behavior**:
+- Short complaints: Poor embedding quality
+- Long complaints: Truncation at 512 tokens
+
+**Mitigation**:
+```python
+def preprocess_for_length(text: str, min_length=20, max_length=5000):
+    """Handle extreme text lengths."""
+    # Too short - flag for manual review
+    if len(text) < min_length:
+        return {
+            'text': text,
+            'valid': False,
+            'reason': 'too_short',
+            'embedding_strategy': 'skip'
+        }
+
+    # Too long - chunk and aggregate
+    if len(text) > max_length:
+        # Split into chunks, embed each, average
+        chunks = chunk_text(text, chunk_size=500, overlap=50)
+        return {
+            'text': text,
+            'valid': True,
+            'reason': 'chunked',
+            'embedding_strategy': 'average_chunks',
+            'chunks': chunks
+        }
+
+    return {'text': text, 'valid': True, 'embedding_strategy': 'standard'}
+```
+
+### Statistical Edge Cases
+
+#### 5. Zero Denominator in PRR
+
+**Scenario**: No baseline complaints for comparison group
+
+**Behavior**:
+- Division by zero
+- PRR undefined
+
+**Mitigation**:
+```python
+def safe_prr(a, b, c, d, smoothing=0.5):
+    """PRR with Laplace smoothing for edge cases."""
+    # Add smoothing to avoid division by zero
+    a_smooth = a + smoothing
+    b_smooth = b + smoothing
+    c_smooth = c + smoothing
+    d_smooth = d + smoothing
+
+    if (a_smooth + b_smooth) == 0 or (c_smooth + d_smooth) == 0:
+        return None, None, 'insufficient_data'
+
+    prr = (a_smooth / (a_smooth + b_smooth)) / (c_smooth / (c_smooth + d_smooth))
+
+    # Return with confidence indicator
+    confidence = 'high' if min(a, c) >= 5 else 'low'
+    return prr, confidence, None
+```
+
+#### 6. Simpson's Paradox
+
+**Scenario**: Aggregated PRR shows no signal, but stratified analysis does
+
+**Example**:
+```
+Overall: Component X has PRR=1.5 (no signal)
+Toyota Camry 2020: PRR=4.2 (strong signal!)
+All other vehicles: PRR=0.8 (below expected)
+```
+
+**Behavior**:
+- Aggregation masks true signals
+- False negatives at aggregate level
+
+**Mitigation**:
+```python
+def stratified_prr_analysis(df, component, stratify_by=['make', 'model', 'year_range']):
+    """Always calculate PRR at multiple granularities."""
+    results = []
+
+    # Overall
+    results.append({
+        'level': 'overall',
+        'prr': calculate_prr(df, component),
+    })
+
+    # Stratified
+    for group_cols in stratify_by:
+        for group_name, group_df in df.groupby(group_cols):
+            prr = calculate_prr(group_df, component)
+            if prr and prr > 2.0:  # Only report significant
+                results.append({
+                    'level': group_cols,
+                    'group': group_name,
+                    'prr': prr,
+                })
+
+    # Flag Simpson's paradox
+    overall_prr = results[0]['prr']
+    stratified_signals = [r for r in results[1:] if r['prr'] > 2.0]
+
+    if overall_prr < 2.0 and len(stratified_signals) > 0:
+        logger.warning(f"Simpson's paradox detected for {component}")
+        return {
+            'paradox_detected': True,
+            'overall_prr': overall_prr,
+            'hidden_signals': stratified_signals
+        }
+
+    return {'paradox_detected': False, 'results': results}
+```
+
+### Temporal Edge Cases
+
+#### 7. Seasonality Masking Trends
+
+**Scenario**: Complaints spike every winter (battery issues), masking a real trend
+
+**Behavior**:
+- Change point detection fires every winter
+- False trend alerts
+
+**Mitigation**:
+```python
+def deseasonalize_for_detection(time_series, period=12):
+    """Remove seasonality before change point detection."""
+    from statsmodels.tsa.seasonal import STL
+
+    if len(time_series) < period * 2:
+        # Not enough data for seasonal decomposition
+        return time_series
+
+    stl = STL(time_series, period=period, robust=True)
+    result = stl.fit()
+
+    # Return trend + residual (seasonality removed)
+    return result.trend + result.resid
+```
+
+#### 8. New Vehicle Model Introduction
+
+**Scenario**: 2025 model year complaints start appearing with no baseline
+
+**Behavior**:
+- No historical comparison possible
+- PRR undefined (no "expected" rate)
+
+**Mitigation**:
+```python
+def handle_new_model_year(df, make, model, year, min_baseline_complaints=20):
+    """Special handling for new model years."""
+    # Check for similar models as proxy baseline
+    similar_models = find_similar_models(df, make, model)
+
+    # Check if this is genuinely new
+    baseline_count = len(df[(df['make'] == make) & (df['model'] == model) & (df['year'] < year)])
+
+    if baseline_count < min_baseline_complaints:
+        return {
+            'status': 'new_model',
+            'baseline_available': False,
+            'similar_models': similar_models,
+            'recommendation': 'Monitor complaint rate vs similar models, flag if anomalous'
+        }
+
+    return {'status': 'established', 'baseline_available': True}
+```
+
+### Clustering Edge Cases
+
+#### 9. Topic Drift Over Time
+
+**Scenario**: "Engine" complaints in 2015 vs 2025 mean different things (ICE vs EV)
+
+**Behavior**:
+- Same topic label, different actual meaning
+- Trends analysis misleading
+
+**Mitigation**:
+```python
+def detect_topic_semantic_drift(topic_model, topic_id, time_periods):
+    """Detect if a topic's meaning has changed over time."""
+    topic_words_over_time = []
+
+    for period_start, period_end in time_periods:
+        # Get documents from this period
+        period_docs = filter_by_date(documents, period_start, period_end)
+
+        # Get topic representation for this period
+        period_words = get_topic_words_for_period(topic_model, topic_id, period_docs)
+        topic_words_over_time.append(set(period_words[:10]))
+
+    # Calculate Jaccard similarity between consecutive periods
+    similarities = []
+    for i in range(1, len(topic_words_over_time)):
+        jaccard = len(topic_words_over_time[i-1] & topic_words_over_time[i]) / \
+                  len(topic_words_over_time[i-1] | topic_words_over_time[i])
+        similarities.append(jaccard)
+
+    # Flag if significant drift
+    if min(similarities) < 0.5:
+        return {
+            'drift_detected': True,
+            'min_similarity': min(similarities),
+            'recommendation': 'Consider splitting topic by time period'
+        }
+
+    return {'drift_detected': False}
+```
+
+#### 10. Cross-Lingual Complaints
+
+**Scenario**: Complaints in Spanish, Chinese, or mixed language
+
+**Behavior**:
+- English-trained models produce poor embeddings
+- Creates artificial clusters by language
+
+**Mitigation**:
+```python
+from langdetect import detect
+
+def handle_multilingual(text):
+    """Detect and handle non-English complaints."""
+    try:
+        language = detect(text)
+    except:
+        language = 'unknown'
+
+    if language != 'en':
+        return {
+            'original_language': language,
+            'strategy': 'translate_or_separate',
+            'options': [
+                'Use multilingual model (paraphrase-multilingual-mpnet-base-v2)',
+                'Translate to English first',
+                'Cluster separately by language'
+            ]
+        }
+
+    return {'original_language': 'en', 'strategy': 'standard'}
+```
+
+### System Edge Cases
+
+#### 11. Model Version Mismatch
+
+**Scenario**: Embeddings generated with model v1, clustering run with model v2
+
+**Behavior**:
+- Incompatible embedding dimensions
+- Silently wrong results if same dimensions but different semantics
+
+**Mitigation**:
+```python
+@dataclass
+class EmbeddingMetadata:
+    model_name: str
+    model_version: str
+    dimensions: int
+    created_at: datetime
+
+def validate_embedding_compatibility(embeddings_meta: EmbeddingMetadata,
+                                     model_meta: dict) -> bool:
+    """Ensure embeddings and model are compatible."""
+    if embeddings_meta.model_name != model_meta['name']:
+        raise ValueError(f"Model mismatch: embeddings from {embeddings_meta.model_name}, "
+                        f"current model is {model_meta['name']}")
+
+    if embeddings_meta.model_version != model_meta['version']:
+        logger.warning(f"Version mismatch: embeddings v{embeddings_meta.model_version}, "
+                      f"model v{model_meta['version']}. Results may vary.")
+
+    return True
+```
+
+#### 12. Partial Pipeline Failure
+
+**Scenario**: Embedding succeeds, clustering fails, anomaly detection succeeds
+
+**Behavior**:
+- Inconsistent state
+- Some complaints have anomaly scores but no pattern assignment
+
+**Mitigation**:
+```python
+class PipelineTransaction:
+    """Ensure all-or-nothing pipeline execution."""
+
+    def __init__(self, db_session):
+        self.session = db_session
+        self.savepoint = None
+
+    def __enter__(self):
+        self.savepoint = self.session.begin_nested()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            logger.error(f"Pipeline failed: {exc_val}")
+            self.savepoint.rollback()
+            self.session.commit()  # Commit rollback
+            return False
+
+        self.savepoint.commit()
+        return True
+
+# Usage
+async def run_pipeline(complaints):
+    with PipelineTransaction(db_session) as txn:
+        embeddings = generate_embeddings(complaints)
+        patterns = run_clustering(embeddings)
+        anomalies = detect_anomalies(embeddings)
+        signals = calculate_signals(patterns)
+
+        # Only committed if ALL succeed
+        save_results(patterns, anomalies, signals)
+```
+
+### Summary: Edge Case Handling Matrix
+
+| Edge Case | Detection | Graceful Degradation | Alerting |
+|-----------|-----------|---------------------|----------|
+| Empty corpus | Count check | Return empty with message | Log warning |
+| Dominant topic | Topic distribution analysis | Flag for review | Dashboard metric |
+| Duplicate embeddings | Pairwise similarity | Dedupe or flag | Alert if >10% |
+| Extreme text length | Length check | Chunk or skip | Count in metrics |
+| Zero denominator | Null check | Return undefined | Silent (expected) |
+| Simpson's paradox | Stratified analysis | Report stratified | Alert on detection |
+| Seasonality | Decomposition | Deseasonalize | None (automated) |
+| New model year | Historical check | Use similar models | Flag in results |
+| Topic drift | Jaccard similarity | Split by time | Alert if <0.5 |
+| Non-English | Language detection | Separate pipeline | Count in metrics |
+| Model mismatch | Metadata check | Reject or warn | Alert on mismatch |
+| Partial failure | Transaction wrapper | Full rollback | Alert immediately |
+
+---
+
+*Document Version: 3.1 | Status: Ready for Principal Engineer Review*
+*Total Sections: 15 main + 11 appendices (3,422 lines)*
+*Coverage: Architecture, Implementation, Migration, ADRs, Operations, Security, Cost, Evaluation, Edge Cases*
+*Iteration: 4 - Added Quick Reference, Scope & Non-Goals, Dependencies*
+*Changelog:*
+- *v1.0: Initial architecture draft*
+- *v2.0: Added Success Metrics, Backtesting Protocol, Quality Gates*
+- *v2.1: Added operational appendices (Cost, Testing, API, Runbook)*
+- *v3.0: Added Migration Strategy, 6 ADRs, Edge Cases appendix*
+- *v3.1: Added TL;DR Quick Reference, Scope & Non-Goals, Dependency diagram*
 *Next Step: Principal engineer review and stakeholder sign-off*
