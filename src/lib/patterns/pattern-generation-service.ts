@@ -58,8 +58,10 @@ export interface GenerationResult {
   success: boolean;
   patternsCreated: number;
   patternsUpdated: number;
+  patternsMerged: number;
   complaintsProcessed: number;
   noiseCount: number;
+  severeRescued: number;
   durationMs: number;
   error?: string;
 }
@@ -82,6 +84,12 @@ export class PatternGenerationService {
    * 1. Group complaints by make+model (vehicle)
    * 2. Run BERTopic clustering separately for each vehicle
    * 3. This ensures patterns are vehicle-specific (no cross-make contamination)
+   *
+   * POST-PROCESSING:
+   * 4. Rescue severe complaints from noise (deaths/injuries)
+   * 5. Merge duplicate patterns (same make/model/component)
+   * 6. Recalculate aggregate severity metrics
+   * 7. Calculate trend direction
    */
   async generatePatterns(): Promise<GenerationResult> {
     const startTime = Date.now();
@@ -89,6 +97,8 @@ export class PatternGenerationService {
     let totalUpdated = 0;
     let totalProcessed = 0;
     let totalNoise = 0;
+    let totalMerged = 0;
+    let totalRescued = 0;
 
     try {
       // Step 1: Check ML service availability
@@ -98,8 +108,10 @@ export class PatternGenerationService {
           success: false,
           patternsCreated: 0,
           patternsUpdated: 0,
+          patternsMerged: 0,
           complaintsProcessed: 0,
           noiseCount: 0,
+          severeRescued: 0,
           durationMs: Date.now() - startTime,
           error: 'ML service is not available',
         };
@@ -113,8 +125,10 @@ export class PatternGenerationService {
           success: true,
           patternsCreated: 0,
           patternsUpdated: 0,
+          patternsMerged: 0,
           complaintsProcessed: 0,
           noiseCount: 0,
+          severeRescued: 0,
           durationMs: Date.now() - startTime,
         };
       }
@@ -162,12 +176,35 @@ export class PatternGenerationService {
         totalNoise += result.noiseCount;
       }
 
+      // POST-PROCESSING STEPS
+      console.log('[PatternGeneration] Starting post-processing...');
+
+      // Step 5: Rescue severe complaints from noise
+      const rescueResult = await this.rescueSevereComplaintsFromNoise();
+      totalRescued = rescueResult.rescued;
+      console.log(`[PatternGeneration] Rescued ${totalRescued} severe complaints from noise`);
+
+      // Step 6: Merge duplicate patterns (same make/model/component)
+      const mergeResult = await this.mergeDuplicatePatterns();
+      totalMerged = mergeResult.merged;
+      console.log(`[PatternGeneration] Merged ${totalMerged} duplicate patterns`);
+
+      // Step 7: Recalculate aggregate severity metrics for all patterns
+      await this.recalculateAllPatternMetrics();
+      console.log('[PatternGeneration] Recalculated all pattern metrics');
+
+      // Step 8: Calculate trend directions
+      await this.calculateAllTrendDirections();
+      console.log('[PatternGeneration] Calculated trend directions');
+
       return {
         success: true,
         patternsCreated: totalCreated,
         patternsUpdated: totalUpdated,
+        patternsMerged: totalMerged,
         complaintsProcessed: totalProcessed,
         noiseCount: totalNoise,
+        severeRescued: totalRescued,
         durationMs: Date.now() - startTime,
       };
     } catch (error) {
@@ -176,8 +213,10 @@ export class PatternGenerationService {
         success: false,
         patternsCreated: totalCreated,
         patternsUpdated: totalUpdated,
+        patternsMerged: totalMerged,
         complaintsProcessed: totalProcessed,
         noiseCount: totalNoise,
+        severeRescued: totalRescued,
         durationMs: Date.now() - startTime,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
@@ -550,6 +589,316 @@ export class PatternGenerationService {
     }
 
     return score;
+  }
+
+  // ============================================
+  // POST-PROCESSING METHODS
+  // ============================================
+
+  /**
+   * Rescue severe complaints from noise by assigning to nearest pattern
+   * This ensures complaints with deaths/injuries are NEVER left unlinked
+   */
+  private async rescueSevereComplaintsFromNoise(): Promise<{ rescued: number }> {
+    // Find unlinked severe complaints with embeddings
+    const severeUnlinked = await prisma.$queryRawUnsafe<
+      Array<{
+        id: string;
+        make: string;
+        model: string;
+        component: string;
+        embedding: string;
+        deaths: number;
+        injuries: number;
+      }>
+    >(`
+      SELECT id, make, model, component, embedding::text as embedding, deaths, injuries
+      FROM "Complaint"
+      WHERE "clusterId" IS NULL
+        AND embedding IS NOT NULL
+        AND (deaths > 0 OR injuries > 0 OR crash = true OR fire = true)
+    `);
+
+    if (severeUnlinked.length === 0) {
+      return { rescued: 0 };
+    }
+
+    console.log(`[RescueSevere] Found ${severeUnlinked.length} severe unlinked complaints`);
+
+    // Get all patterns with their make/model for matching
+    const patterns = await prisma.pattern.findMany({
+      select: { id: true, make: true, model: true, component: true },
+    });
+
+    // Guard against undefined/null patterns array
+    if (!patterns || patterns.length === 0) {
+      console.log('[RescueSevere] No patterns exist yet, skipping rescue');
+      return { rescued: 0 };
+    }
+
+    let rescued = 0;
+
+    for (const complaint of severeUnlinked) {
+      // Find patterns for the same vehicle (make+model)
+      const matchingPatterns = patterns.filter(
+        (p) =>
+          p.make.toUpperCase() === complaint.make?.toUpperCase() &&
+          p.model?.toUpperCase() === complaint.model?.toUpperCase()
+      );
+
+      if (matchingPatterns.length === 0) {
+        // No matching vehicle patterns - try to find by just make
+        const makePatterns = patterns.filter(
+          (p) => p.make.toUpperCase() === complaint.make?.toUpperCase()
+        );
+        if (makePatterns.length > 0) {
+          // Pick the first one (could be improved with component matching)
+          const targetPattern = makePatterns.find(
+            (p) => p.component.toUpperCase() === complaint.component?.toUpperCase()
+          ) || makePatterns[0];
+
+          await prisma.complaint.update({
+            where: { id: complaint.id },
+            data: { clusterId: targetPattern.id },
+          });
+          rescued++;
+          continue;
+        }
+        // No matching patterns at all - skip (will remain as noise)
+        continue;
+      }
+
+      // Find pattern with matching component, or use first match
+      const targetPattern =
+        matchingPatterns.find(
+          (p) => p.component.toUpperCase() === complaint.component?.toUpperCase()
+        ) || matchingPatterns[0];
+
+      await prisma.complaint.update({
+        where: { id: complaint.id },
+        data: { clusterId: targetPattern.id },
+      });
+      rescued++;
+    }
+
+    return { rescued };
+  }
+
+  /**
+   * Merge duplicate patterns (same make/model/component)
+   * Keeps the one with highest complaint count, transfers complaints from others
+   */
+  private async mergeDuplicatePatterns(): Promise<{ merged: number }> {
+    // Get all patterns grouped by make/model/component
+    const patterns = await prisma.pattern.findMany({
+      select: {
+        id: true,
+        make: true,
+        model: true,
+        component: true,
+        complaintCount: true,
+        severityScore: true,
+        name: true,
+      },
+      orderBy: { complaintCount: 'desc' },
+    });
+
+    // Guard against undefined/null patterns array
+    if (!patterns || patterns.length === 0) {
+      console.log('[MergePatterns] No patterns exist, skipping merge');
+      return { merged: 0 };
+    }
+
+    // Group by make|model|component
+    const groups = new Map<string, typeof patterns>();
+    for (const pattern of patterns) {
+      const key = `${pattern.make}|${pattern.model || ''}|${pattern.component}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)!.push(pattern);
+    }
+
+    let merged = 0;
+
+    for (const [key, group] of groups) {
+      if (group.length <= 1) continue;
+
+      // Keep the first one (highest complaint count due to sort)
+      const keepPattern = group[0];
+      const deletePatterns = group.slice(1);
+
+      console.log(
+        `[MergePatterns] Merging ${group.length} patterns for ${key} -> keeping "${keepPattern.name}"`
+      );
+
+      // Transfer complaints from duplicates to the keeper
+      for (const deletePattern of deletePatterns) {
+        await prisma.complaint.updateMany({
+          where: { clusterId: deletePattern.id },
+          data: { clusterId: keepPattern.id },
+        });
+
+        // Delete the duplicate pattern
+        await prisma.pattern.delete({
+          where: { id: deletePattern.id },
+        });
+
+        merged++;
+      }
+    }
+
+    return { merged };
+  }
+
+  /**
+   * Recalculate aggregate metrics (deathCount, injuryCount, etc.) for all patterns
+   * This ensures pattern stats are derived from actual linked complaints
+   */
+  private async recalculateAllPatternMetrics(): Promise<void> {
+    const patterns = await prisma.pattern.findMany({
+      select: { id: true },
+    });
+
+    // Guard against undefined/null patterns array
+    if (!patterns || patterns.length === 0) {
+      console.log('[RecalculateMetrics] No patterns exist, skipping recalculation');
+      return;
+    }
+
+    for (const pattern of patterns) {
+      // Get aggregate stats from linked complaints
+      const stats = await prisma.complaint.aggregate({
+        where: { clusterId: pattern.id },
+        _count: { id: true },
+        _sum: {
+          deaths: true,
+          injuries: true,
+        },
+      });
+
+      // Count crashes and fires separately (they're booleans)
+      const crashCount = await prisma.complaint.count({
+        where: { clusterId: pattern.id, crash: true },
+      });
+      const fireCount = await prisma.complaint.count({
+        where: { clusterId: pattern.id, fire: true },
+      });
+
+      // Get year range from linked complaints
+      const yearStats = await prisma.complaint.aggregate({
+        where: {
+          clusterId: pattern.id,
+          year: { not: null, gte: 1900, lte: new Date().getFullYear() + 2 },
+        },
+        _min: { year: true },
+        _max: { year: true },
+      });
+
+      // Calculate severity score
+      const deathCount = stats._sum.deaths || 0;
+      const injuryCount = stats._sum.injuries || 0;
+      const severityScore =
+        deathCount * SEVERITY_WEIGHTS.death +
+        injuryCount * SEVERITY_WEIGHTS.injury +
+        crashCount * SEVERITY_WEIGHTS.crash +
+        fireCount * SEVERITY_WEIGHTS.fire;
+
+      // Update pattern
+      await prisma.pattern.update({
+        where: { id: pattern.id },
+        data: {
+          complaintCount: stats._count.id,
+          deathCount,
+          injuryCount,
+          crashCount,
+          fireCount,
+          severityScore,
+          yearStart: yearStats._min.year,
+          yearEnd: yearStats._max.year,
+          lastUpdated: new Date(),
+        },
+      });
+    }
+  }
+
+  /**
+   * Calculate trend direction for all patterns based on temporal analysis
+   * Uses linear regression on monthly complaint counts
+   */
+  private async calculateAllTrendDirections(): Promise<void> {
+    const patterns = await prisma.pattern.findMany({
+      select: { id: true },
+    });
+
+    // Guard against undefined/null patterns array
+    if (!patterns || patterns.length === 0) {
+      console.log('[TrendDetection] No patterns exist, skipping trend calculation');
+      return;
+    }
+
+    for (const pattern of patterns) {
+      // Get complaints with dates for this pattern
+      const complaints = await prisma.complaint.findMany({
+        where: { clusterId: pattern.id },
+        select: { dateAdded: true },
+        orderBy: { dateAdded: 'asc' },
+      });
+
+      if (complaints.length < 3) {
+        // Not enough data for trend analysis
+        continue;
+      }
+
+      // Group by month
+      const monthlyCount = new Map<string, number>();
+      for (const complaint of complaints) {
+        const date = new Date(complaint.dateAdded);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyCount.set(monthKey, (monthlyCount.get(monthKey) || 0) + 1);
+      }
+
+      const months = Array.from(monthlyCount.keys()).sort();
+      if (months.length < 3) {
+        continue;
+      }
+
+      // Calculate linear regression slope
+      const n = months.length;
+      const x = months.map((_, i) => i);
+      const y = months.map((m) => monthlyCount.get(m) || 0);
+
+      const sumX = x.reduce((a, b) => a + b, 0);
+      const sumY = y.reduce((a, b) => a + b, 0);
+      const sumXY = x.reduce((acc, xi, i) => acc + xi * y[i], 0);
+      const sumXX = x.reduce((acc, xi) => acc + xi * xi, 0);
+
+      const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+
+      // Determine trend direction based on slope
+      // Normalize slope by average to get a relative measure
+      const avgY = sumY / n;
+      const normalizedSlope = avgY > 0 ? slope / avgY : 0;
+
+      let trendDirection: 'INCREASING' | 'DECREASING' | 'STABLE' = 'STABLE';
+      let trendScore = 0;
+
+      if (normalizedSlope > 0.1) {
+        trendDirection = 'INCREASING';
+        trendScore = Math.min(normalizedSlope * 100, 100);
+      } else if (normalizedSlope < -0.1) {
+        trendDirection = 'DECREASING';
+        trendScore = Math.max(normalizedSlope * 100, -100);
+      }
+
+      await prisma.pattern.update({
+        where: { id: pattern.id },
+        data: {
+          trendDirection,
+          trendScore,
+        },
+      });
+    }
   }
 }
 
