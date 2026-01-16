@@ -58,5 +58,15 @@ next-env.d.ts
 *.local
 .test-*
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+.venv-*/
+venv/
+
 # clerk configuration (can include secrets)
 /.clerk/
