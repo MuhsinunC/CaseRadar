@@ -26,6 +26,22 @@ Every Ralph loop needs **two files**:
 
 ---
 
+## Context Window Warning
+
+**Your context window WILL reset during long loops.**
+
+The implementation plan is your ONLY persistent memory. Every iteration, you start fresh with no memory of previous iterations except what's written in files.
+
+**If you don't write it down, you WILL forget it.**
+
+This is why:
+- Notes go under each task
+- You track iteration numbers
+- You document what worked AND what didn't
+- You log errors with full details
+
+---
+
 ## Prompt File Structure
 
 The prompt file **must** start with `ultrathink:` as the very first characters:
@@ -45,15 +61,25 @@ Brief description of what needs to be accomplished.
 1. Read the relevant section of the implementation plan
 2. Check notes under that section for previous attempts
 3. Complete the next incomplete task
-4. Add notes under that task about what you tried/learned
+4. Add notes under that task (include iteration number)
 5. Run tests and verify they pass
 6. Continue until all tasks done
 7. Commit and push all changes
+8. Verify Definition of Done checklist
+
+## When Stuck
+If you've tried multiple approaches without progress:
+1. Document the blocker clearly in notes
+2. List all approaches attempted with iteration numbers
+3. Hypothesize why they failed
+4. Suggest alternative approaches for next iteration
+5. Consider if the task needs to be broken down further
 
 ## Completion Criteria
 - All tasks in the implementation plan are done
 - ALL tests have been run AND pass
 - All changes are committed AND pushed to remote
+- Definition of Done checklist is complete
 
 ## Completion Promise
 Output `<promise>TASK_COMPLETE</promise>` only when ALL completion criteria are met.
@@ -71,6 +97,7 @@ The implementation plan follows **Test-Driven Development (TDD)** with **hierarc
 
 1. **Notes go under each task, not in a separate section**
    - Each task can have sub-notes (1.a., 1.a.i., etc.)
+   - Include iteration numbers in notes
    - This keeps context close to the work
    - You only need to read the relevant section, not the whole file
 
@@ -81,6 +108,10 @@ The implementation plan follows **Test-Driven Development (TDD)** with **hierarc
 
 3. **End with commit and push**
    - Loop is NOT complete until changes are pushed
+
+4. **Checkpoints for long tasks**
+   - Commit at logical checkpoints
+   - Don't wait until the end to commit
 
 ### Template
 
@@ -97,6 +128,7 @@ What we're building and why.
 ### 1.1. Codebase Understanding
 - [ ] Review existing code for similar/related functionality
   - Notes: (what you found, what already exists)
+  - Iteration N: (findings)
 - [ ] Identify what already exists to avoid duplicate work
   - Notes: (existing implementations discovered)
 - [ ] Understand current patterns and conventions
@@ -131,6 +163,11 @@ What we're building and why.
 - [ ] Verify test FAILS before implementation
   - Notes: (failure message observed)
 
+### 2.3. Checkpoint: Tests Written
+- [ ] All tests written and verified failing
+- [ ] Commit checkpoint: `test: add failing tests for [feature]`
+  - Notes: (commit hash)
+
 ---
 
 ## 3. Implementation (TDD Green Phase)
@@ -139,10 +176,15 @@ What we're building and why.
 - [ ] Write minimal code to make test pass
   - Notes: (approach taken)
   - 3.1.a. Attempts:
-    - 3.1.a.i. First attempt: (what you tried)
+    - 3.1.a.i. Iteration N - First attempt: (what you tried)
     - 3.1.a.ii. Result: (passed/failed, why)
   - 3.1.b. What didn't work: (failed approaches)
   - 3.1.c. What worked: (successful approach)
+  - 3.1.d. Errors encountered:
+    - Error: `ErrorMessage here`
+    - File: `path/to/file.ts:lineNumber`
+    - Cause: (why it happened)
+    - Fix: (how you fixed it)
 - [ ] Verify test passes
   - Notes: (test output)
 
@@ -157,6 +199,12 @@ What we're building and why.
   - Notes: (refactoring done)
 - [ ] All tests still pass after refactor
   - Notes: (test results)
+
+### 3.4. Checkpoint: Implementation Complete
+- [ ] All features implemented
+- [ ] All unit tests pass
+- [ ] Commit checkpoint: `feat: implement [feature]`
+  - Notes: (commit hash)
 
 ---
 
@@ -174,6 +222,15 @@ What we're building and why.
 - [ ] All browser tests pass
   - Notes: (results)
 
+### 4.3. If Existing Tests Break
+- [ ] Document which tests broke
+  - Notes: (test names, error messages)
+- [ ] Investigate why
+  - Notes: (root cause)
+- [ ] Fix without breaking functionality
+  - Notes: (approach taken)
+  - 4.3.a. If rollback needed: `git stash` or `git checkout -- <file>`
+
 ---
 
 ## 5. Finalize
@@ -188,17 +245,44 @@ What we're building and why.
 - [ ] Commit with descriptive message
   - Notes: (commit hash)
 - [ ] Push to remote
-  - Notes: (push confirmed)
+  - Notes: (push confirmed, branch name)
 
 ---
 
-## Completion Criteria
-ALL of the following must be true:
-1. All checkboxes marked [x]
-2. All tests have been RUN
-3. All tests PASS (green, not red)
-4. All changes COMMITTED
-5. All changes PUSHED to remote
+## Definition of Done (Check ALL Before Promise)
+
+- [ ] All task checkboxes marked [x]
+- [ ] All tests have been run
+- [ ] All tests pass (0 failures, 0 errors)
+- [ ] No linter errors
+- [ ] `git status` shows clean working tree
+- [ ] `git push` succeeded
+- [ ] No skipped or ignored tests
+
+Only output the completion promise when ALL boxes above are checked.
+
+---
+
+## Stuck Protocol
+
+If after multiple iterations you're not making progress:
+
+### Document the Blocker
+```markdown
+### BLOCKER (Iteration N)
+- **What's blocked**: (specific task)
+- **Attempts made**:
+  - Iteration X: Tried A, failed because B
+  - Iteration Y: Tried C, failed because D
+- **Hypotheses for failure**:
+  1. (why it might not be working)
+  2. (alternative theory)
+- **Suggested next steps**:
+  1. (approach to try)
+  2. (fallback approach)
+- **Should this task be broken down?**: Yes/No
+  - If yes: (proposed subtasks)
+```
 ```
 
 ---
@@ -242,14 +326,24 @@ By putting notes **under each task**:
 - Notes stay close to the relevant context
 - You don't need to load the entire file to understand one task
 
-**Note format:**
+**Note format with iteration tracking:**
 ```markdown
 - [ ] Task description
   - Notes: (general notes about this task)
+  - Iteration 1: Tried X, result Y
+  - Iteration 2: Tried Z, result W
   - 1.a. Sub-note: (more detail)
     - 1.a.i. Even more detail
   - 1.b. What didn't work: (failed approach and why)
   - 1.c. What worked: (successful approach)
+```
+
+**Error logging format:**
+```markdown
+  - Error: `TypeError: Cannot read property 'x' of undefined`
+    - File: `src/auth.ts:42`
+    - Cause: Missing null check
+    - Fix: Added optional chaining `user?.profile`
 ```
 
 This prevents:
@@ -273,15 +367,36 @@ The loop is **NOT complete** until:
 - All changes are staged
 - All changes are committed
 - All changes are pushed to remote
+- `git status` shows clean working tree
 
 This is often forgotten! Add it to your completion criteria.
 
-### 6. Browser Testing Available
+### 6. Checkpoint Commits
+
+For long tasks, commit at logical checkpoints:
+- After writing failing tests
+- After implementing each major feature
+- Before refactoring
+- After fixing bugs
+
+This creates a safety net and makes rollbacks easier.
+
+### 7. Browser Testing Available
 
 For UI or web-related tasks:
 - The **browser tool** is available for actual browser tests
 - Use it to verify UI functionality works in a real browser
 - Include browser tests in Section 4
+
+### 8. Rollback Protocol
+
+If your implementation breaks existing tests:
+
+1. **Don't panic** - document what broke
+2. **Stash or revert**: `git stash` or `git checkout -- <file>`
+3. **Investigate**: Why do existing tests depend on this?
+4. **Adjust approach**: Maintain backwards compatibility
+5. **Document**: Note this in the task so you don't repeat it
 
 ---
 
@@ -337,6 +452,10 @@ Add user authentication with JWT tokens.
 - [ ] Verify test fails
   - Notes:
 
+### 2.4. Checkpoint
+- [ ] Commit: `test: add failing auth tests`
+  - Notes:
+
 ---
 
 ## 3. Implementation (TDD Green)
@@ -359,6 +478,10 @@ Add user authentication with JWT tokens.
 - [ ] Make validation test pass
   - Notes:
 - [ ] Test passes
+  - Notes:
+
+### 3.4. Checkpoint
+- [ ] Commit: `feat: implement JWT authentication`
   - Notes:
 
 ---
@@ -384,17 +507,21 @@ Add user authentication with JWT tokens.
   - Notes:
 
 ### 5.2. Commit and Push
-- [ ] Commit all changes
+- [ ] Final commit
   - Notes:
 - [ ] Push to remote
   - Notes:
 
 ---
 
-## Completion Criteria
-1. All tasks [x]
-2. All tests passing
-3. Committed and pushed
+## Definition of Done
+
+- [ ] All tasks [x]
+- [ ] All tests run
+- [ ] All tests pass (0 failures)
+- [ ] No linter errors
+- [ ] git status clean
+- [ ] git push succeeded
 ```
 
 ### Step 2: Create the prompt file
@@ -418,24 +545,37 @@ Implement user authentication following TDD methodology.
 3. Find the first incomplete task (marked with `- [ ]`)
 4. Complete that task
 5. Mark it done with `- [x]`
-6. Add notes under that task about what you tried/learned
+6. Add notes under that task (include iteration number)
 7. If writing tests: verify they FAIL before implementing
 8. Run tests after implementation changes
-9. Continue to next task
-10. When all tasks done: commit and push
+9. Commit at checkpoints
+10. When all tasks done: final commit and push
+11. Verify Definition of Done checklist
+
+## When Stuck
+If multiple iterations without progress:
+1. Document blocker with iteration numbers
+2. List all approaches tried
+3. Hypothesize why they failed
+4. Suggest alternatives
+5. Consider breaking down the task
 
 ## Important Rules
 - Complete Section 1 (Research) before any implementation
 - Tests must FAIL before you implement (TDD red phase)
-- Add notes under each task, not in a separate section
+- Add notes under each task with iteration numbers
+- Log errors with file, line, cause, fix
+- Commit at checkpoints, not just at the end
 - Do NOT mark complete until all tests PASS
 - Do NOT mark complete until changes are PUSHED
+- Verify Definition of Done before outputting promise
 
 ## Completion Promise
 Output `<promise>FEATURE_X_DONE</promise>` when:
 - All tasks complete
 - All tests pass (green)
 - All changes committed and pushed
+- Definition of Done verified
 ```
 
 ### Step 3: Run the Ralph loop
@@ -459,9 +599,13 @@ Output `<promise>FEATURE_X_DONE</promise>` when:
 | Skipping research | Duplicate work, bugs | Complete Section 1 first |
 | Implementation before failing tests | Not TDD | Write test, verify it FAILS, then implement |
 | Notes in separate section | Hard to find context | Put notes under each task |
+| No iteration numbers | Can't track progress | Include iteration N in notes |
 | Tests run but fail | Premature completion | Tests must PASS, not just run |
 | Changes not pushed | Incomplete work | Must commit AND push |
+| No checkpoint commits | Hard to rollback | Commit at logical checkpoints |
 | Forgetting browser tests | UI bugs missed | Use browser tool for UI tasks |
+| Repeating failed approaches | Wasted iterations | Document what didn't work and why |
+| No error details | Can't debug later | Log error, file, line, cause, fix |
 
 ---
 
@@ -472,14 +616,19 @@ Before starting a Ralph loop, verify:
 - [ ] Created implementation plan with TDD structure
 - [ ] Plan has Section 1 for research (codebase + external)
 - [ ] Plan has Section 2 for writing FAILING tests first
+- [ ] Plan has checkpoint commits throughout
 - [ ] Plan has Section 5 for commit AND push
+- [ ] Plan has Definition of Done checklist
 - [ ] Notes go under each task (hierarchical: 1.a., 1.a.i., etc.)
 - [ ] Created prompt file starting with `ultrathink:`
 - [ ] Prompt instructs to read plan file section by section
+- [ ] Prompt instructs to include iteration numbers in notes
 - [ ] Prompt instructs to verify tests FAIL before implementing
-- [ ] Prompt instructs to add notes under each task
+- [ ] Prompt instructs to log errors with full details
+- [ ] Prompt has "When Stuck" protocol
 - [ ] Prompt specifies tests must PASS (not just run)
 - [ ] Prompt specifies must commit AND push
+- [ ] Prompt specifies to verify Definition of Done
 - [ ] `--max-iterations` is set (minimum 10)
 - [ ] `--completion-promise` matches what's in the prompt file
 - [ ] Using `cat` to read prompt file, not inline quotes
