@@ -8,7 +8,7 @@
 
 import { Readable } from 'stream';
 import { prisma } from '@/lib/db';
-import { parseFlatFileStream, mapFlatFileToComplaint, FlatFileRecord, isQualityComplaint } from './flat-file-parser';
+import { parseFlatFileStream, mapFlatFileToComplaint, isQualityComplaint } from './flat-file-parser';
 import { TransformedComplaint } from './types';
 import { downloadAndExtract, getFlatFileStream } from './flat-file-downloader';
 import path from 'path';
@@ -253,7 +253,7 @@ export class BulkImportService {
       });
 
       this.currentProgress.recordsInserted += result.count;
-    } catch (error) {
+    } catch {
       // If batch insert fails, try individual inserts
       for (const complaint of batch) {
         try {
