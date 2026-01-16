@@ -62,15 +62,18 @@ def get_device():
 
 DEVICE = get_device()
 
-# Optimal batch size varies by device (benchmarked 2026-01-15)
-# GPU (MPS): batch_size=100 optimal (1848 texts/sec)
-# CPU: batch_size=256 optimal (1129 texts/sec)
+# Optimal batch size varies by device (benchmarked 2026-01-16)
+# GPU (MPS): batch_size=128 optimal (~430 texts/sec with real data)
+# GPU (CUDA): batch_size=256 typically optimal
+# CPU: batch_size=256 optimal (~1129 texts/sec)
 def get_optimal_batch_size():
     """Get optimal batch size based on device."""
     if os.getenv("MAX_BATCH_SIZE"):
         return int(os.getenv("MAX_BATCH_SIZE"))
-    if DEVICE in ("mps", "cuda"):
-        return 100  # GPU optimal
+    if DEVICE == "cuda":
+        return 256  # CUDA can handle larger batches
+    if DEVICE == "mps":
+        return 128  # MPS optimal (tested with real complaint data)
     return 256  # CPU optimal
 
 MAX_BATCH_SIZE = get_optimal_batch_size()
@@ -217,18 +220,25 @@ class DLQJobResponse(BaseModel):
 LAZY_LOAD_MODEL = os.getenv("LAZY_LOAD_MODEL", "false").lower() == "true"
 
 
+# Use half precision (FP16) for faster inference on GPU
+USE_FP16 = os.getenv("USE_FP16", "true").lower() == "true" and DEVICE in ("mps", "cuda")
+
+
 def _load_model_sync():
     """Synchronously load the model (runs in thread for async context)."""
     global model, model_loading
     model_loading = True
     load_start = time.time()
-    print(f"Loading model: {MODEL_NAME} on device: {DEVICE}")
+    precision = "FP16" if USE_FP16 else "FP32"
+    print(f"Loading model: {MODEL_NAME} on device: {DEVICE} ({precision})")
     try:
         loaded = SentenceTransformer(MODEL_NAME, trust_remote_code=True, device=DEVICE)
+        if USE_FP16:
+            loaded = loaded.half()  # Convert to FP16 for faster inference
         model = loaded
         MODEL_LOADED.set(1)
         load_time = time.time() - load_start
-        print(f"Model loaded successfully in {load_time:.1f}s: {MODEL_NAME} on {DEVICE}")
+        print(f"Model loaded successfully in {load_time:.1f}s: {MODEL_NAME} on {DEVICE} ({precision})")
     except Exception as e:
         print(f"Failed to load model: {e}")
         MODEL_LOADED.set(0)
@@ -286,6 +296,18 @@ def normalize_embedding(embedding: np.ndarray) -> list[float]:
     if norm > 0:
         embedding = embedding / norm
     return embedding.tolist()
+
+
+def normalize_embeddings_batch(embeddings: np.ndarray) -> list[list[float]]:
+    """L2 normalize multiple embeddings efficiently (vectorized)."""
+    # Compute norms for all embeddings at once
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    # Avoid division by zero
+    norms = np.where(norms > 0, norms, 1.0)
+    # Normalize
+    normalized = embeddings / norms
+    # Convert to list efficiently
+    return normalized.tolist()
 
 
 def calculate_retry_delay(retry_count: int) -> float:
@@ -379,8 +401,16 @@ async def embed_batch(request: BatchEmbedRequest):
     try:
         # Add prefix for Nomic models
         prefixed_texts = [f"search_document: {text}" for text in request.texts]
-        embeddings = model.encode(prefixed_texts, convert_to_numpy=True)
-        normalized = [normalize_embedding(emb) for emb in embeddings]
+        # Use built-in normalization for speed (avoids manual loop)
+        embeddings = model.encode(
+            prefixed_texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            batch_size=MAX_BATCH_SIZE,
+            show_progress_bar=False
+        )
+        # Convert to list efficiently (already normalized by model)
+        normalized = embeddings.tolist()
 
         latency_ms = (time.time() - start_time) * 1000
 

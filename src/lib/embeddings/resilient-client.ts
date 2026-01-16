@@ -264,7 +264,7 @@ export class ResilientEmbeddingClient {
       if (this.config.preferScalableService && !this.circuitBreaker.isOpen()) {
         try {
           const embeddings = await this.tryScalableWithRetry(() =>
-            this.scalableClient.embedBatchLarge(texts, 100, onProgress)
+            this.scalableClient.embedBatchLarge(texts, 128, onProgress)
           );
           this.updateLatency(Date.now() - startTime);
           return embeddings;

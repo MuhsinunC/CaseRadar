@@ -35,15 +35,19 @@ interface PipelineConfig {
   maxReadAhead: number;       // Max batches to buffer before backpressure
   maxWriteBuffer: number;     // Max batches waiting to be written
   numEmbedWorkers: number;    // Number of concurrent embedding workers
+  maxTextLength: number;      // Max chars for embedding text (0 = no limit)
 }
 
 const DEFAULT_CONFIG: PipelineConfig = {
-  readBatchSize: 500,         // Read 500 at a time
-  embedBatchSize: 500,        // Embed 500 at a time (matches API optimal)
-  writeBatchSize: 500,        // Write 500 at a time (matches UNNEST optimal)
-  maxReadAhead: 6,            // Buffer up to 6 batches
-  maxWriteBuffer: 6,          // Buffer up to 6 write batches
-  numEmbedWorkers: 3,         // Concurrent embedding workers (load balancer distributes)
+  readBatchSize: 500,         // Read 500 at a time (balanced for DB and embedding)
+  embedBatchSize: 500,        // Embed 500 at a time (resilient client chunks to 128)
+  writeBatchSize: 500,        // Write 500 at a time (UNNEST optimal)
+  maxReadAhead: 8,            // Buffer up to 8 batches (keep GPU fed)
+  maxWriteBuffer: 8,          // Buffer up to 8 write batches
+  numEmbedWorkers: 4,         // 4 concurrent workers (balance concurrency vs contention)
+  maxTextLength: 500,         // Truncate to 500 chars for ~195 emb/s (4x faster)
+                               // Captures vehicle, component, and main issue description
+                               // Set to 0 for no truncation (slower but full semantic info)
 };
 
 // Types for pipeline data
@@ -155,20 +159,31 @@ class AsyncQueue<T> {
 
 /**
  * Prepare complaint text for embedding
+ * @param maxLength Optional max length (0 = no truncation)
  */
-function prepareText(complaint: {
-  make: string;
-  model: string;
-  year: number | null;
-  component: string;
-  description: string;
-}): string {
+function prepareText(
+  complaint: {
+    make: string;
+    model: string;
+    year: number | null;
+    component: string;
+    description: string;
+  },
+  maxLength: number = 0
+): string {
   const yearStr = complaint.year ?? 'Unknown';
-  return [
+  let text = [
     `Vehicle: ${yearStr} ${complaint.make} ${complaint.model}`,
     `Component: ${complaint.component}`,
     `Issue: ${complaint.description}`,
   ].join('\n');
+
+  // Truncate if maxLength is set and text exceeds it
+  if (maxLength > 0 && text.length > maxLength) {
+    text = text.slice(0, maxLength);
+  }
+
+  return text;
 }
 
 /**
@@ -261,7 +276,7 @@ export class PipelinedEmbedder {
           break; // No more to process
         }
 
-        const texts = complaints.map(prepareText);
+        const texts = complaints.map(c => prepareText(c, this.config.maxTextLength));
 
         await this.readQueue.push({ complaints, texts });
 

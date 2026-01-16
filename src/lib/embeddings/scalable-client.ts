@@ -108,15 +108,16 @@ export class ScalableEmbeddingClient {
   }
 
   /**
-   * Generate embeddings for multiple texts (up to 100).
+   * Generate embeddings for multiple texts (up to 128).
+   * Batch size matches the optimized embedding service configuration.
    */
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (!texts || texts.length === 0) {
       throw new Error('Texts array cannot be empty');
     }
 
-    if (texts.length > 100) {
-      throw new Error('Batch size cannot exceed 100 texts');
+    if (texts.length > 128) {
+      throw new Error('Batch size cannot exceed 128 texts');
     }
 
     // Validate all texts are non-empty
@@ -137,25 +138,42 @@ export class ScalableEmbeddingClient {
 
   /**
    * Generate embeddings for large batches by chunking into smaller batches.
+   * Uses parallel requests for better throughput.
    */
   async embedBatchLarge(
     texts: string[],
-    batchSize: number = 100,
+    batchSize: number = 128, // Increased from 100 to match optimized service
     onProgress?: (completed: number, total: number) => void
   ): Promise<number[][]> {
-    const results: number[][] = [];
-
+    // Split into batches
+    const batches: string[][] = [];
     for (let i = 0; i < texts.length; i += batchSize) {
-      const batch = texts.slice(i, i + batchSize);
-      const embeddings = await this.embedBatch(batch);
-      results.push(...embeddings);
-
-      if (onProgress) {
-        onProgress(Math.min(i + batchSize, texts.length), texts.length);
-      }
+      batches.push(texts.slice(i, i + batchSize));
     }
 
-    return results;
+    // Process batches in parallel for better throughput
+    // Limit concurrency to avoid overwhelming the service
+    const maxConcurrent = 4;
+    const results: number[][][] = new Array(batches.length);
+    let completed = 0;
+
+    for (let i = 0; i < batches.length; i += maxConcurrent) {
+      const batchGroup = batches.slice(i, i + maxConcurrent);
+      const promises = batchGroup.map(async (batch, idx) => {
+        const embeddings = await this.embedBatch(batch);
+        results[i + idx] = [embeddings];
+        completed += batch.length;
+        if (onProgress) {
+          onProgress(Math.min(completed, texts.length), texts.length);
+        }
+        return embeddings;
+      });
+
+      await Promise.all(promises);
+    }
+
+    // Flatten results in correct order
+    return results.flat(2);
   }
 
   /**
