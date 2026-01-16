@@ -8,14 +8,14 @@ Quick reference for setting up Ralph loops correctly. Copy this file to any proj
 
 ```bash
 # Command format
-/ralph-loop:ralph-loop "$(cat .claude/task-loop.md)" --max-iterations 10 --completion-promise "TASK_DONE"
+/ralph-loop:ralph-loop "$(cat .claude/<feature>-loop.md)" --max-iterations 10 --completion-promise "<FEATURE>_COMPLETE"
 
 # Cancel a loop
 /ralph-loop:cancel-ralph
 
 # Required files
-1. Prompt file (.claude/task-loop.md) - starts with "ultrathink:"
-2. Implementation plan (.claude/task-plan.md) - TDD structure with notes
+1. Prompt file (.claude/<feature>-loop.md) - starts with "ultrathink:"
+2. Implementation plan (.claude/<feature>-implementation-plan.md) - TDD structure with notes
 
 # Order of operations
 Research → Failing Tests → Implementation → Playwright Tests → Integration → Commit+Push
@@ -38,7 +38,7 @@ When you want to implement a feature:
 1. **You describe the feature**: "Make a Ralph loop to implement caching for the most commonly requested database operations"
 
 2. **Claude reads this guide and creates TWO files**:
-   - **Implementation plan** (`.claude/caching-plan.md`) - Comprehensive, meant to be iterated on
+   - **Implementation plan** (`.claude/caching-implementation-plan.md`) - Comprehensive, meant to be iterated on
    - **Prompt file** (`.claude/caching-loop.md`) - Starts with `ultrathink:`
 
 3. **The Ralph loop runs**, iterating on the implementation plan until complete
@@ -85,13 +85,13 @@ Use these in the prompt file to improve reasoning:
 
 Every Ralph loop needs **two files**:
 
-1. **Prompt file** (e.g., `.claude/my-task-loop.md`)
-2. **Implementation plan file** (e.g., `.claude/my-task-plan.md`)
+1. **Prompt file** (e.g., `.claude/<feature>-loop.md`)
+2. **Implementation plan file** (e.g., `.claude/<feature>-implementation-plan.md`)
 
 ## Command Format
 
 ```bash
-/ralph-loop:ralph-loop "$(cat .claude/my-task-loop.md)" --max-iterations 10 --completion-promise "TASK_COMPLETE"
+/ralph-loop:ralph-loop "$(cat .claude/<feature>-loop.md)" --max-iterations 10 --completion-promise "<FEATURE>_COMPLETE"
 ```
 
 **Never embed the prompt directly in quotes.** Always use `cat` to read from a file.
@@ -205,7 +205,7 @@ ultrathink:
 Brief description of what needs to be accomplished.
 
 ## Files
-- Implementation plan: `.claude/my-task-plan.md`
+- Implementation plan: `.claude/<feature>-implementation-plan.md`
 
 ## Thinking Guidelines
 - Think through each step carefully before acting
@@ -262,7 +262,7 @@ When all criteria are met:
 3. This gives the user visibility into what came up during development
 
 ## Completion Promise
-Output `<promise>TASK_COMPLETE</promise>` only when ALL completion criteria are met.
+Output `<promise><FEATURE>_COMPLETE</promise>` only when ALL completion criteria are met.
 
 This promise MUST match the --completion-promise parameter exactly.
 
@@ -279,38 +279,41 @@ The plan is meant to be **iterated on and improved** during the loop. The resear
 
 ### Key Principles
 
-1. **Task-level to-do lists**
-   - When starting a task, think through and create a to-do list using TodoWrite
-   - Save the exact to-do list items as children under that task in the plan
-   - Work through completing the entire to-do list
-   - Mark items complete in both TodoWrite AND the plan
-   - After the to-do list is done, move on to the next task
-   - This provides visible progress tracking for both you and the user
+1. **Research before implementation**
+   - ALWAYS complete Section 1 before writing any code
+   - Check what already exists to avoid duplicate work
+   - Research can refine the implementation plan itself
 
-2. **Notes go under each task, not in a separate section**
-   - Each task can have sub-notes (1.a., 1.a.i., etc.)
-   - Include iteration numbers in notes
-   - This keeps context close to the work
-   - You only need to read the relevant section, not the whole file
+2. **Task-level to-do lists**
+   - When starting a task, create a to-do list using TodoWrite
+   - Save items as children under that task in the plan
+   - Mark complete in both TodoWrite AND the plan
 
-3. **Tests must be FAILING before implementation**
-   - Write the test first
-   - Verify it fails (red phase)
+3. **Notes go under each task** (not in a separate section)
+   - Include iteration numbers: `Iteration N: tried X, result Y`
+   - Log errors with detail: `Error: message` → `File: path:line` → `Cause` → `Fix`
+   - Document what worked AND what didn't
+
+4. **Tests must FAIL before implementation** (TDD)
+   - Write the test first, verify it fails (red phase)
+   - If test passes unexpectedly: stop and investigate
    - Only then implement to make it pass (green phase)
 
-4. **Playwright before browser tool**
-   - Use Playwright for programmatic browser testing (faster, repeatable)
-   - Playwright tests must pass first
+5. **Tests must PASS before completion**
+   - All tests executed and GREEN
+   - No skipped or ignored tests
+
+6. **Playwright before browser tool**
+   - Playwright is faster and repeatable
    - Browser tool only if manual verification needed after Playwright passes
 
-5. **End with commit and push**
-   - Loop is NOT complete until changes are pushed
+7. **End with commit AND push**
+   - Loop is NOT complete until changes are pushed to remote
 
-6. **Checkpoints for long tasks**
-   - Commit at logical checkpoints
-   - Don't wait until the end to commit
+8. **Checkpoints for long tasks**
+   - Commit at logical checkpoints, not just at the end
 
-7. **No scope creep**
+9. **No scope creep**
    - Only implement what's in the plan
    - Note "Future Work" ideas but don't implement them
 
@@ -615,123 +618,7 @@ If after multiple iterations you're not making progress:
 
 ---
 
-## Critical Rules
-
-### 1. Research Before Implementation
-
-**ALWAYS complete Section 1 before writing any code.**
-
-Why this matters:
-- Avoids duplicate work (something might already exist!)
-- Prevents bugs from conflicting implementations
-- Saves time by understanding the landscape first
-- Identifies the right approach before committing to it
-- **Refines the implementation plan itself**
-
-Research includes:
-- **Codebase**: What already exists? What patterns are used?
-- **External**: APIs, SDKs, libraries, online documentation
-- **Plan refinement**: Update the plan based on what you learn
-
-### 2. Tests Must FAIL First (TDD)
-
-This is non-negotiable:
-
-1. **Write the test** for the feature
-2. **Run the test** - it MUST fail
-3. **If test passes**: Stop! Investigate why. The feature might already exist.
-4. **Only after confirming failure**: Implement the feature
-5. **Run test again** - it should now pass
-
-The "red" phase (failing test) proves your test actually tests something.
-
-### 3. Playwright Before Browser Tool
-
-For UI/browser testing:
-
-1. **Write Playwright tests first** - programmatic, fast, repeatable
-2. **Run Playwright tests** - they must pass
-3. **Only then** use browser tool IF manual verification is needed
-4. Browser tool is slower and not repeatable - use sparingly
-
-Playwright can do almost everything browser tool can, but faster and programmatically.
-
-### 4. Hierarchical Notes Under Each Task
-
-**Why this structure?**
-
-Ralph loops can run for many iterations, exceeding your context window. The implementation plan is your persistent memory, but it might get large.
-
-By putting notes **under each task**:
-- You only read the section you're working on
-- Notes stay close to the relevant context
-- You don't need to load the entire file to understand one task
-
-**Note format with iteration tracking:**
-```markdown
-- [ ] Task description
-  - Notes: (general notes about this task)
-  - Iteration 1: Tried X, result Y
-  - Iteration 2: Tried Z, result W
-  - 1.a. Sub-note: (more detail)
-    - 1.a.i. Even more detail
-  - 1.b. What didn't work: (failed approach and why)
-  - 1.c. What worked: (successful approach)
-```
-
-**Error logging format:**
-```markdown
-  - Error: `TypeError: Cannot read property 'x' of undefined`
-    - File: `src/auth.ts:42`
-    - Cause: Missing null check
-    - Fix: Added optional chaining `user?.profile`
-```
-
-This prevents:
-- Trying the same failed approach repeatedly
-- Forgetting what you learned
-- Losing context between iterations
-
-### 5. Tests Must PASS (Not Just Run)
-
-The loop is **NOT complete** until:
-- All tests have been executed
-- All tests are GREEN (passing)
-- No skipped or ignored tests
-- No failing tests
-
-Running tests that fail does not count as completion.
-
-### 6. Must Commit AND Push
-
-The loop is **NOT complete** until:
-- All changes are staged
-- All changes are committed
-- All changes are pushed to remote
-- `git status` shows clean working tree
-
-This is often forgotten! Add it to your completion criteria.
-
-### 7. Checkpoint Commits
-
-For long tasks, commit at logical checkpoints:
-- After writing failing tests
-- After implementing each major feature
-- Before refactoring
-- After fixing bugs
-
-This creates a safety net and makes rollbacks easier.
-
-### 8. No Scope Creep
-
-Do NOT add features not in the original plan.
-
-If you discover something that "should" be added:
-1. Note it in "Future Work (Out of Scope)" section
-2. Do NOT implement it in this loop
-3. Stay focused on the defined tasks
-
-### 9. Rollback Protocol
+## Rollback Protocol
 
 If your implementation breaks existing tests:
 
@@ -747,178 +634,18 @@ If your implementation breaks existing tests:
 
 ### Step 1: Create the implementation plan
 
-File: `.claude/feature-x-plan.md`
+File: `.claude/feature-x-implementation-plan.md`
 
-```markdown
-# Feature X Implementation Plan
-
-## Overview
-Add user authentication with JWT tokens.
-
-## Progress Summary
-- Current Phase: 1. Research
-- Tasks Complete: 0/20
-- Last Updated: Iteration 0
-- Blockers: None
-
-## Files Changed
-- Created: (none yet)
-- Modified: (none yet)
-
-## Future Work (Out of Scope)
-- (none yet)
-
----
-
-## 0. Environment Setup
-
-- [ ] JWT_SECRET env var configured
-  - Notes:
-
----
-
-## 1. Research Phase
-
-### 1.1. Codebase Understanding
-- [ ] Check if auth already exists
-  - Notes:
-  - Double-check before implementing
-- [ ] Review existing user model
-  - Notes:
-- [ ] Check API patterns used
-  - Notes:
-
-### 1.2. External Research
-- [ ] Research JWT library options
-  - Notes:
-  - 1.2.a. Libraries considered:
-  - 1.2.b. Library chosen and why:
-  - List pros and cons of each
-
-### 1.3. Plan Refinement
-- [ ] Update plan based on research
-  - Notes:
-
----
-
-## 2. Write Failing Tests (TDD Red)
-
-### 2.1. Registration Test
-- [ ] Write test: user can register
-  - Notes:
-  - Check for edge cases
-- [ ] Verify test fails
-  - Notes:
-
-### 2.2. Login Test
-- [ ] Write test: user can login
-  - Notes:
-- [ ] Verify test fails
-  - Notes:
-
-### 2.3. Validation Test
-- [ ] Write test: invalid credentials rejected
-  - Notes:
-- [ ] Verify test fails
-  - Notes:
-
-### 2.4. Playwright Test
-- [ ] Write Playwright test for login UI
-  - Notes:
-- [ ] Verify test fails
-  - Notes:
-
-### 2.5. Checkpoint
-- [ ] Commit: `test: add failing auth tests`
-  - Notes:
-
----
-
-## 3. Implementation (TDD Green)
-
-### 3.1. Implement Registration
-- [ ] Make registration test pass
-  - Notes:
-  - Be careful not to break existing functionality
-  - 3.1.a. Approach:
-  - 3.1.b. Issues encountered:
-- [ ] Test passes
-  - Notes:
-
-### 3.2. Implement Login
-- [ ] Make login test pass
-  - Notes:
-- [ ] Test passes
-  - Notes:
-
-### 3.3. Implement Validation
-- [ ] Make validation test pass
-  - Notes:
-- [ ] Test passes
-  - Notes:
-
-### 3.4. Checkpoint
-- [ ] Commit: `feat: implement JWT authentication`
-  - Notes:
-
----
-
-## 4. Integration Testing
-
-### 4.1. Unit Tests
-- [ ] All unit tests pass
-  - Notes:
-
-### 4.2. Playwright Tests
-- [ ] All Playwright tests pass
-  - Notes:
-
-### 4.3. Integration Tests
-- [ ] All integration tests pass
-  - Notes:
-
-### 4.4. Browser Tool (Only If Needed)
-- [ ] Manual browser verification (if Playwright insufficient)
-  - Notes:
-
----
-
-## 5. Finalize
-
-### 5.1. Documentation
-- [ ] Update API docs
-  - Notes:
-
-### 5.2. Commit and Push
-- [ ] Final commit
-  - Notes:
-- [ ] Push to remote
-  - Notes:
-
----
-
-## Validation Commands
-
-```bash
-npm test
-npm run test:e2e
-npm run lint
-git status
-git push
-```
-
----
-
-## Definition of Done
-
-- [ ] All tasks [x]
-- [ ] All unit tests pass
-- [ ] All Playwright tests pass
-- [ ] All integration tests pass
-- [ ] No linter errors
-- [ ] git status clean
-- [ ] git push succeeded
-```
+Use the template from the "Implementation Plan File Structure" section above, customized for your feature. The plan should include:
+- Overview describing JWT authentication
+- Progress Summary
+- Section 0: Environment setup (JWT_SECRET)
+- Section 1: Research (existing auth, user model, JWT libraries)
+- Section 2: Failing tests (registration, login, validation, Playwright)
+- Section 3: Implementation
+- Section 4: Integration testing
+- Section 5: Finalize (commit and push)
+- Validation Commands and Definition of Done
 
 ### Step 2: Create the prompt file
 
@@ -933,7 +660,7 @@ ultrathink:
 Implement user authentication following TDD methodology.
 
 ## Files
-- Plan: `.claude/feature-x-plan.md`
+- Plan: `.claude/feature-x-implementation-plan.md`
 
 ## Thinking Guidelines
 - Think through each step carefully before acting
@@ -947,7 +674,7 @@ Implement user authentication following TDD methodology.
 ## Instructions
 
 ### First Iteration
-1. Read the ENTIRE `.claude/feature-x-plan.md` to understand scope
+1. Read the ENTIRE `.claude/feature-x-implementation-plan.md` to understand scope
 2. Check Progress Summary for current phase
 3. Go to step 4 below
 
@@ -995,7 +722,7 @@ If multiple iterations without progress:
 - Verify Definition of Done before outputting promise
 
 ## Completion Promise
-Output `<promise>FEATURE_X_DONE</promise>` when:
+Output `<promise>FEATURE_X_COMPLETE</promise>` when:
 - All tasks complete
 - All tests pass (unit + Playwright + integration)
 - All changes committed and pushed
@@ -1007,7 +734,7 @@ After the promise, output "## Future Work Discovered" listing items from Future 
 ### Step 3: Run the Ralph loop
 
 ```bash
-/ralph-loop:ralph-loop "$(cat .claude/feature-x-loop.md)" --max-iterations 15 --completion-promise "FEATURE_X_DONE"
+/ralph-loop:ralph-loop "$(cat .claude/feature-x-loop.md)" --max-iterations 15 --completion-promise "FEATURE_X_COMPLETE"
 ```
 
 ---
@@ -1042,39 +769,13 @@ After the promise, output "## Future Work Discovered" listing items from Future 
 
 Before starting a Ralph loop, verify:
 
-- [ ] Created implementation plan with TDD structure
-- [ ] Plan has Progress Summary section
-- [ ] Plan has Files Changed tracking
-- [ ] Plan has Future Work section (for scope creep prevention)
-- [ ] Plan has Section 0 for environment setup (if needed)
-- [ ] Plan has Section 1 for research (codebase + external + plan refinement)
-- [ ] Plan has Section 2 for writing FAILING tests first (including Playwright)
-- [ ] Plan has checkpoint commits throughout
-- [ ] Plan has Playwright tests before browser tool
-- [ ] Plan has Section 5 for commit AND push
-- [ ] Plan has Validation Commands
-- [ ] Plan has Definition of Done checklist
-- [ ] Notes go under each task (hierarchical: 1.a., 1.a.i., etc.)
-- [ ] Created prompt file starting with `ultrathink:`
-- [ ] Prompt has Thinking Guidelines with reasoning prompts
-- [ ] Prompt instructs to use TodoWrite when starting each task
-- [ ] Prompt instructs to save to-do items as children in plan
-- [ ] Prompt instructs to keep TodoWrite and plan in sync
-- [ ] Prompt has First Iteration vs Later Iterations instructions
-- [ ] Prompt instructs to read plan file section by section (later iterations)
-- [ ] Prompt instructs to include iteration numbers in notes
-- [ ] Prompt instructs to verify tests FAIL before implementing
-- [ ] Prompt instructs to log errors with full details
-- [ ] Prompt has "When Stuck" protocol
-- [ ] Prompt specifies tests must PASS (not just run)
-- [ ] Prompt specifies Playwright before browser tool
-- [ ] Prompt specifies no scope creep
-- [ ] Prompt specifies must commit AND push
-- [ ] Prompt specifies to verify Definition of Done
-- [ ] Prompt specifies to output Future Work after completion
-- [ ] `--max-iterations` is set (minimum 10)
-- [ ] `--completion-promise` matches what's in the prompt file
-- [ ] Using `cat` to read prompt file, not inline quotes
+- [ ] Implementation plan exists: `.claude/<feature>-implementation-plan.md`
+- [ ] Prompt file exists: `.claude/<feature>-loop.md`
+- [ ] Prompt starts with `ultrathink:`
+- [ ] Plan follows the template (Progress Summary, Definition of Done, etc.)
+- [ ] `--max-iterations` is set (default: 10)
+- [ ] `--completion-promise` matches the promise in the prompt file
+- [ ] Command uses `cat` to read prompt file (not inline quotes)
 
 ---
 
