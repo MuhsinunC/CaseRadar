@@ -121,6 +121,64 @@ This is why:
 
 ---
 
+## First Iteration vs Later Iterations
+
+### Iteration 1 (Start of Loop)
+On the first iteration:
+1. Read the **entire** implementation plan to understand full scope
+2. Check Progress Summary for current phase and blockers
+3. Identify the first incomplete task
+4. Create to-do list for that task using TodoWrite
+5. Save to-do items to the plan
+6. Begin working
+
+### Later Iterations (After Context Reset)
+When context resets:
+1. Check Progress Summary: What phase are we in? What's the last iteration number?
+2. Read **only the current section** (use offset/limit for large plans)
+3. Check notes under the current task for previous attempts
+4. Continue where you left off (don't restart from beginning)
+5. Update Progress Summary with new iteration number
+
+**How to detect context reset**: If you don't remember previous work but Progress Summary shows iteration > 1, context has reset.
+
+---
+
+## TodoWrite vs Implementation Plan
+
+**TodoWrite** (real-time visibility):
+- User sees progress immediately in their terminal
+- Provides satisfying "checking off" experience
+- Resets on context window reset
+- For the current iteration only
+
+**Implementation Plan** (persistence):
+- Survives context window resets
+- Your only memory between iterations
+- Must stay in sync with TodoWrite
+- For all iterations
+
+**Keep them in sync**: When marking TodoWrite complete, also mark the plan complete.
+
+---
+
+## Iteration Expectations
+
+| Iterations | Status | Action |
+|------------|--------|--------|
+| 1-3 | Normal | Keep working |
+| 4-5 | Slow | Review approach, check notes |
+| 6-10 | Potentially stuck | Consider Stuck Protocol |
+| 10+ on same task | Stuck | Definitely invoke Stuck Protocol |
+
+**If stuck for 3+ iterations on the same task:**
+1. Stop attempting the same approach
+2. Document what's tried in notes
+3. Follow Stuck Protocol (document blocker, list alternatives)
+4. Consider breaking down the task
+
+---
+
 ## Do NOT
 
 - Implement before tests fail (TDD red phase first)
@@ -157,19 +215,30 @@ Brief description of what needs to be accomplished.
 - Be careful not to break existing functionality
 
 ## Instructions
-1. Read the relevant section of the implementation plan
-2. Check notes under that section for previous attempts
-3. For the next incomplete task:
+
+### First Iteration
+1. Read the ENTIRE implementation plan to understand scope
+2. Check Progress Summary for current phase
+3. Go to "Every Task" step 4 below
+
+### Later Iterations (after context reset)
+1. Check Progress Summary: What phase? What iteration?
+2. Read only the current section (use offset/limit if plan is large)
+3. Check notes for previous attempts
+4. Go to "Every Task" step 4 below
+
+### Every Task
+4. For the next incomplete task:
    a. Think through and create a to-do list using TodoWrite
-   b. Save the exact to-do list items as children in the plan
+   b. Save the exact to-do items as children in the plan
    c. Work through completing each to-do item
-   d. Mark items complete in both TodoWrite AND the plan
-4. Add notes under the task (include iteration number)
-5. Run tests and verify they pass
-6. After task to-do list is done, move to the next task
-7. Continue until all tasks done
-8. Commit and push all changes
-9. Verify Definition of Done checklist
+   d. Mark items complete in BOTH TodoWrite AND the plan
+5. Add notes under the task (include iteration number)
+6. Run tests and verify they pass
+7. After task to-do list is done, move to the next task
+8. Continue until all tasks done
+9. Commit and push all changes
+10. Verify Definition of Done checklist
 
 ## When Stuck
 If you've tried multiple approaches without progress:
@@ -186,10 +255,18 @@ If you've tried multiple approaches without progress:
 - All changes are committed AND pushed to remote
 - Definition of Done checklist is complete
 
+## On Completion
+When all criteria are met:
+1. Output the completion promise
+2. List all items from "Future Work (Out of Scope)" section
+3. This gives the user visibility into what came up during development
+
 ## Completion Promise
 Output `<promise>TASK_COMPLETE</promise>` only when ALL completion criteria are met.
 
 This promise MUST match the --completion-promise parameter exactly.
+
+After the promise, output a "## Future Work Discovered" section listing all items from Future Work (or "None" if empty).
 ```
 
 ---
@@ -216,24 +293,24 @@ The plan is meant to be **iterated on and improved** during the loop. The resear
    - This keeps context close to the work
    - You only need to read the relevant section, not the whole file
 
-4. **Tests must be FAILING before implementation**
+3. **Tests must be FAILING before implementation**
    - Write the test first
    - Verify it fails (red phase)
    - Only then implement to make it pass (green phase)
 
-5. **Playwright before browser tool**
+4. **Playwright before browser tool**
    - Use Playwright for programmatic browser testing (faster, repeatable)
    - Playwright tests must pass first
    - Browser tool only if manual verification needed after Playwright passes
 
-6. **End with commit and push**
+5. **End with commit and push**
    - Loop is NOT complete until changes are pushed
 
-7. **Checkpoints for long tasks**
+6. **Checkpoints for long tasks**
    - Commit at logical checkpoints
    - Don't wait until the end to commit
 
-8. **No scope creep**
+7. **No scope creep**
    - Only implement what's in the plan
    - Note "Future Work" ideas but don't implement them
 
@@ -244,13 +321,15 @@ When you start working on a task like "3.1. Implement Feature A":
 **Step 1: Create to-do list with TodoWrite**
 ```
 TodoWrite: [
-  { content: "Read existing auth code patterns", status: "pending" },
-  { content: "Create AuthService class", status: "pending" },
-  { content: "Add login method", status: "pending" },
-  { content: "Add logout method", status: "pending" },
-  { content: "Run tests to verify", status: "pending" }
+  { content: "Read existing auth code patterns", activeForm: "Reading existing auth code patterns", status: "pending" },
+  { content: "Create AuthService class", activeForm: "Creating AuthService class", status: "pending" },
+  { content: "Add login method", activeForm: "Adding login method", status: "pending" },
+  { content: "Add logout method", activeForm: "Adding logout method", status: "pending" },
+  { content: "Run tests to verify", activeForm: "Running tests to verify", status: "pending" }
 ]
 ```
+
+Note: `content` is what to do (imperative), `activeForm` is what you're doing (present continuous). Both are required.
 
 **Step 2: Save these items as children in the implementation plan**
 ```markdown
@@ -866,14 +945,28 @@ Implement user authentication following TDD methodology.
 - What dependencies might this affect?
 
 ## Instructions
-1. Read the current section of `.claude/feature-x-plan.md`
-2. Check notes under that section for previous attempts
-3. Find the first incomplete task (marked with `- [ ]`)
-4. Complete that task
-5. Mark it done with `- [x]`
-6. Add notes under that task (include iteration number)
-7. If writing tests: verify they FAIL before implementing
-8. Run tests after implementation changes
+
+### First Iteration
+1. Read the ENTIRE `.claude/feature-x-plan.md` to understand scope
+2. Check Progress Summary for current phase
+3. Go to step 4 below
+
+### Later Iterations (after context reset)
+1. Check Progress Summary: What phase? What iteration?
+2. Read only the current section (use offset/limit if plan is large)
+3. Check notes for previous attempts
+4. Continue from step 4 below
+
+### Every Task
+4. For the next incomplete task:
+   a. Think through and create a to-do list using TodoWrite
+   b. Save the exact to-do items as children in the plan
+   c. Work through completing each to-do item
+   d. Mark items complete in BOTH TodoWrite AND the plan
+5. Add notes under that task (include iteration number)
+6. If writing tests: verify they FAIL before implementing
+7. Run tests after implementation changes
+8. After task to-do list is done, move to next task
 9. Commit at checkpoints
 10. When all tasks done: final commit and push
 11. Verify Definition of Done checklist
@@ -907,6 +1000,8 @@ Output `<promise>FEATURE_X_DONE</promise>` when:
 - All tests pass (unit + Playwright + integration)
 - All changes committed and pushed
 - Definition of Done verified
+
+After the promise, output "## Future Work Discovered" listing items from Future Work section (or "None").
 ```
 
 ### Step 3: Run the Ralph loop
@@ -938,6 +1033,8 @@ Output `<promise>FEATURE_X_DONE</promise>` when:
 | Scope creep | Feature bloat | Only implement what's in the plan |
 | Repeating failed approaches | Wasted iterations | Document what didn't work and why |
 | No error details | Can't debug later | Log error, file, line, cause, fix |
+| No TodoWrite for tasks | User can't see progress | Create to-do list at start of each task |
+| TodoWrite/plan out of sync | Confusion, lost progress | Mark complete in BOTH |
 
 ---
 
@@ -960,7 +1057,11 @@ Before starting a Ralph loop, verify:
 - [ ] Notes go under each task (hierarchical: 1.a., 1.a.i., etc.)
 - [ ] Created prompt file starting with `ultrathink:`
 - [ ] Prompt has Thinking Guidelines with reasoning prompts
-- [ ] Prompt instructs to read plan file section by section
+- [ ] Prompt instructs to use TodoWrite when starting each task
+- [ ] Prompt instructs to save to-do items as children in plan
+- [ ] Prompt instructs to keep TodoWrite and plan in sync
+- [ ] Prompt has First Iteration vs Later Iterations instructions
+- [ ] Prompt instructs to read plan file section by section (later iterations)
 - [ ] Prompt instructs to include iteration numbers in notes
 - [ ] Prompt instructs to verify tests FAIL before implementing
 - [ ] Prompt instructs to log errors with full details
@@ -970,6 +1071,7 @@ Before starting a Ralph loop, verify:
 - [ ] Prompt specifies no scope creep
 - [ ] Prompt specifies must commit AND push
 - [ ] Prompt specifies to verify Definition of Done
+- [ ] Prompt specifies to output Future Work after completion
 - [ ] `--max-iterations` is set (minimum 10)
 - [ ] `--completion-promise` matches what's in the prompt file
 - [ ] Using `cat` to read prompt file, not inline quotes
