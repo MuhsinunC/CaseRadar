@@ -12,7 +12,7 @@ Every Ralph loop needs **two files**:
 ## Command Format
 
 ```bash
-/ralph-loop "$(cat .claude/my-task-loop.md)" --max-iterations 10 --completion-promise "TASK_COMPLETE"
+/ralph-loop:ralph-loop "$(cat .claude/my-task-loop.md)" --max-iterations 10 --completion-promise "TASK_COMPLETE"
 ```
 
 **Never embed the prompt directly in quotes.** Always use `cat` to read from a file.
@@ -143,7 +143,7 @@ Output `<promise>FEATURE_X_DONE</promise>` when all tasks in the plan are comple
 ### Step 3: Run the Ralph loop
 
 ```bash
-/ralph-loop "$(cat .claude/feature-x-loop.md)" --max-iterations 10 --completion-promise "FEATURE_X_DONE"
+/ralph-loop:ralph-loop "$(cat .claude/feature-x-loop.md)" --max-iterations 10 --completion-promise "FEATURE_X_DONE"
 ```
 
 ## Common Mistakes
