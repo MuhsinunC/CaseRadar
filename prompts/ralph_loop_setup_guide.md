@@ -250,10 +250,10 @@ If you've tried multiple approaches without progress:
 6. Consider if the task needs to be broken down further
 
 ## Completion Criteria
-- All tasks in the implementation plan are done
+- **ALL checkboxes in the implementation plan are marked [x]** (not just tasks done, but actually checked off in the file)
 - ALL tests have been run AND pass (Playwright + unit + integration)
 - All changes are committed AND pushed to remote
-- Definition of Done checklist is complete
+- Definition of Done checklist is complete (including "ALL checkboxes marked [x]")
 
 ## On Completion
 When all criteria are met:
@@ -578,16 +578,25 @@ git push              # Should succeed
 
 ## Definition of Done (Check ALL Before Promise)
 
-- [ ] All task checkboxes marked [x]
+**CRITICAL: ALL checkboxes in this ENTIRE file must be marked [x]**
+
+Before outputting the completion promise, you MUST:
+1. Go through EVERY section of this plan (0, 1, 2, 3, 4, 5, etc.)
+2. Verify EVERY checkbox `- [ ]` has been changed to `- [x]`
+3. If a task was skipped or not applicable, mark it [x] with a note explaining why
+
+This is not optional. The implementation plan is your permanent record. Unchecked boxes mean incomplete work.
+
+- [ ] **ALL checkboxes in sections 0-5+ are marked [x]** (not just Definition of Done)
 - [ ] All unit tests pass
-- [ ] All Playwright tests pass
+- [ ] All Playwright tests pass (if applicable)
 - [ ] All integration tests pass
 - [ ] No linter errors
 - [ ] `git status` shows clean working tree
 - [ ] `git push` succeeded
 - [ ] No skipped or ignored tests
 
-Only output the completion promise when ALL boxes above are checked.
+Only output the completion promise when ALL boxes above are checked AND all boxes throughout the entire plan are checked.
 
 ---
 
@@ -721,7 +730,8 @@ If multiple iterations without progress:
 - Do NOT add features not in the plan (scope creep)
 - Do NOT mark complete until all tests PASS
 - Do NOT mark complete until changes are PUSHED
-- Verify Definition of Done before outputting promise
+- **MARK EVERY CHECKBOX [x]** - When completing a task, change `- [ ]` to `- [x]` in the plan file
+- Verify Definition of Done before outputting promise (includes ALL checkboxes marked)
 
 ## Completion Promise
 Output `<promise>FEATURE_X_COMPLETE</promise>` when:
@@ -764,6 +774,7 @@ After the promise, output "## Future Work Discovered" listing items from Future 
 | No error details | Can't debug later | Log error, file, line, cause, fix |
 | No TodoWrite for tasks | User can't see progress | Create to-do list at start of each task |
 | TodoWrite/plan out of sync | Confusion, lost progress | Mark complete in BOTH |
+| Unchecked boxes in plan | Incomplete work record, false completion | Change every `- [ ]` to `- [x]` in plan file |
 
 ---
 
