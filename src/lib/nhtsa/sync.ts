@@ -8,6 +8,7 @@ import { prisma } from '@/lib/db';
 import { nhtsaClient } from './client';
 import { transformSODARecords, calculateSeverityScore } from './transformer';
 import { SyncStatus, TransformedComplaint } from './types';
+import { isQualityComplaint, validateComplaint } from './flat-file-parser';
 import {
   generateResilientEmbedding,
   formatEmbeddingForPgvector,
@@ -136,16 +137,25 @@ export const nhtsaSyncService = {
    */
   async insertBatch(
     complaints: TransformedComplaint[]
-  ): Promise<{ count: number }> {
+  ): Promise<{ count: number; rejected: number }> {
     // Check embedding service on first call
     if (!embeddingsEnabled) {
       await initEmbeddingService();
     }
 
     let count = 0;
+    let rejected = 0;
 
     for (const c of complaints) {
       try {
+        // Data quality validation - reject bad records
+        if (!isQualityComplaint(c)) {
+          const validation = validateComplaint(c);
+          console.log(`[Sync] Rejected complaint ${c.nhtsaId}: ${validation.errors.join(', ')}`);
+          rejected++;
+          continue;
+        }
+
         // Check if complaint already exists
         const existing = await prisma.complaint.findFirst({
           where: { nhtsaId: c.nhtsaId },
@@ -226,7 +236,7 @@ export const nhtsaSyncService = {
       }
     }
 
-    return { count };
+    return { count, rejected };
   },
 
   /**
