@@ -229,7 +229,8 @@ Migrate by updating K8s secrets/configmaps to point to managed services.
 
 ## Documentation
 
-- [K8s Embedding Service](./k8s/embedding-service/README.md)
+- [Embedding Service](./services/embedding-service/README.md) - GPU/CPU auto-detection, performance benchmarks
+- [K8s Manifests](./k8s/embedding-service/README.md) - Kubernetes deployment configs
 - [Architecture Plan](./docs/PLAN_v2.md)
 - [Implementation Roadmap](./docs/IMPLEMENTATION_ROADMAP.md)
 

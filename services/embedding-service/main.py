@@ -46,7 +46,6 @@ else:
 # Configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-MAX_BATCH_SIZE = int(os.getenv("MAX_BATCH_SIZE", "100"))
 EMBEDDING_DIM = 768
 
 # Device configuration (auto-detect GPU)
@@ -62,6 +61,19 @@ def get_device():
     return "cpu"
 
 DEVICE = get_device()
+
+# Optimal batch size varies by device (benchmarked 2026-01-15)
+# GPU (MPS): batch_size=100 optimal (1848 texts/sec)
+# CPU: batch_size=256 optimal (1129 texts/sec)
+def get_optimal_batch_size():
+    """Get optimal batch size based on device."""
+    if os.getenv("MAX_BATCH_SIZE"):
+        return int(os.getenv("MAX_BATCH_SIZE"))
+    if DEVICE in ("mps", "cuda"):
+        return 100  # GPU optimal
+    return 256  # CPU optimal
+
+MAX_BATCH_SIZE = get_optimal_batch_size()
 
 # Retry configuration
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
@@ -178,6 +190,8 @@ class HealthResponse(BaseModel):
     status: str
     model_loaded: bool
     model_name: str
+    device: str = DEVICE
+    batch_size: int = MAX_BATCH_SIZE
     redis_connected: bool
     dlq_enabled: bool = DLQ_ENABLED
 
