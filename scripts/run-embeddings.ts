@@ -3,12 +3,17 @@
  * Run Embedding Generation Script
  *
  * Generates embeddings for all complaints without embeddings.
+ * ENFORCES 100% SLA - will retry until all complaints have embeddings.
+ *
+ * Architecture:
+ *   - Primary: GPU generation (MPS on Mac, CUDA on Linux)
+ *   - Fallback: Multi-threaded CPU generation
  *
  * Usage:
- *   DATABASE_URL="postgresql://..." EMBEDDING_SERVICE_URL="http://localhost:8080" npx tsx scripts/run-embeddings.ts
+ *   npx tsx scripts/run-embeddings.ts
  *
- * For K8s (with port-forward active):
- *   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/caseradar" npx tsx scripts/run-embeddings.ts
+ * NOTE: The K8s embedding service is DEPRECATED and blocked.
+ *       Always use the local GPU/CPU service (localhost:8080).
  */
 
 import { runPipelinedEmbedding, PipelineStats } from '../src/lib/embeddings/pipelined-embedder';
@@ -86,15 +91,30 @@ async function main() {
     console.log(`Duration:             ${durationMin} minutes`);
     console.log(`Average rate:         ${rate} embeddings/second`);
 
-    // Verify final count
+    // Verify final count - ENFORCE 100% SLA
     const finalResult = await prisma.$queryRaw<[{ count: bigint }]>`
       SELECT COUNT(*) as count FROM "Complaint" WHERE embedding IS NOT NULL
     `;
     const finalCount = Number(finalResult[0].count);
-    console.log(`\nFinal embedding count: ${finalCount.toLocaleString()} / ${totalCount.toLocaleString()}`);
+    const missingCount = totalCount - finalCount;
+    const coverage = (finalCount / totalCount) * 100;
 
+    console.log(`\n=== SLA Verification ===`);
+    console.log(`Final embedding count: ${finalCount.toLocaleString()} / ${totalCount.toLocaleString()}`);
+    console.log(`Coverage: ${coverage.toFixed(2)}%`);
+    console.log(`Missing: ${missingCount.toLocaleString()}`);
+
+    // ENFORCE 100% SLA
+    if (missingCount > 0) {
+      console.error(`\n❌ SLA VIOLATION: ${missingCount.toLocaleString()} complaints missing embeddings!`);
+      console.error('100% embedding coverage is REQUIRED. Re-run this script to retry failed embeddings.');
+      await prisma.$disconnect();
+      process.exit(1);
+    }
+
+    console.log('\n✅ 100% SLA MET - All complaints have embeddings');
     await prisma.$disconnect();
-    process.exit(stats.errors > 0 ? 1 : 0);
+    process.exit(0);
   } catch (error) {
     console.error('\nEmbedding generation failed:', error);
     await prisma.$disconnect();

@@ -1,7 +1,16 @@
 /**
  * NHTSA Data Sync Service
  * Handles synchronization of NHTSA complaint data with our database
- * Includes embedding generation for semantic search and clustering
+ *
+ * CRITICAL: 100% Embedding SLA
+ * - Every complaint MUST have an embedding before insertion
+ * - No complaint is ever inserted without an embedding
+ * - If embedding generation fails, the insert is blocked
+ *
+ * Embedding Architecture:
+ * - Primary: GPU generation (MPS on Mac, CUDA on Linux)
+ * - Fallback: Multi-threaded CPU generation
+ * - K8s embedding service is DEPRECATED and blocked
  */
 
 import { prisma } from '@/lib/db';
@@ -164,68 +173,66 @@ export const nhtsaSyncService = {
 
         if (existing) continue;
 
-        // Generate embedding if service is available
+        // Generate embedding - MANDATORY for 100% SLA
+        // Retry up to 3 times with exponential backoff
         let embeddingVector: string | null = null;
-        if (embeddingsEnabled) {
+        const maxRetries = 3;
+
+        if (!embeddingsEnabled) {
+          throw new Error(
+            'Embedding service not available. Cannot insert complaints without embeddings (100% SLA required). ' +
+            'Start the embedding service: cd services/embedding-service && python main.py'
+          );
+        }
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
             const text = getEmbeddingText(c);
             const embedding = await generateResilientEmbedding(text);
             embeddingVector = formatEmbeddingForPgvector(embedding);
+            break; // Success
           } catch (error) {
-            console.warn(`Embedding failed for complaint ${c.nhtsaId}:`, error);
+            if (attempt === maxRetries) {
+              throw new Error(
+                `Embedding generation failed after ${maxRetries} attempts for complaint ${c.nhtsaId}: ${error}. ` +
+                '100% embedding SLA required - cannot insert complaint without embedding.'
+              );
+            }
+            // Exponential backoff: 1s, 2s, 4s
+            const delay = Math.pow(2, attempt - 1) * 1000;
+            console.warn(`Embedding attempt ${attempt} failed for ${c.nhtsaId}, retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         }
 
-        // Insert with embedding using raw SQL for pgvector support
-        if (embeddingVector) {
-          await prisma.$executeRaw`
-            INSERT INTO "Complaint" (
-              id, "nhtsaId", "odiNumber", manufacturer, make, model, year,
-              component, description, crash, fire, injuries, deaths,
-              "failDate", "dateAdded", embedding, "createdAt", "updatedAt"
-            ) VALUES (
-              gen_random_uuid(),
-              ${c.nhtsaId},
-              ${c.odiNumber},
-              ${c.manufacturer},
-              ${c.make},
-              ${c.model},
-              ${c.year},
-              ${c.component},
-              ${c.description},
-              ${c.crash},
-              ${c.fire},
-              ${c.injuries},
-              ${c.deaths},
-              ${c.failDate},
-              ${c.dateAdded},
-              ${embeddingVector}::vector,
-              NOW(),
-              NOW()
-            )
-            ON CONFLICT ("nhtsaId") DO NOTHING
-          `;
-        } else {
-          // Insert without embedding
-          await prisma.complaint.create({
-            data: {
-              nhtsaId: c.nhtsaId,
-              odiNumber: c.odiNumber,
-              manufacturer: c.manufacturer,
-              make: c.make,
-              model: c.model,
-              year: c.year,
-              component: c.component,
-              description: c.description,
-              crash: c.crash,
-              fire: c.fire,
-              injuries: c.injuries,
-              deaths: c.deaths,
-              failDate: c.failDate,
-              dateAdded: c.dateAdded,
-            },
-          });
-        }
+        // Insert with embedding - embedding is now REQUIRED
+        await prisma.$executeRaw`
+          INSERT INTO "Complaint" (
+            id, "nhtsaId", "odiNumber", manufacturer, make, model, year,
+            component, description, crash, fire, injuries, deaths,
+            "failDate", "dateAdded", embedding, "createdAt", "updatedAt"
+          ) VALUES (
+            gen_random_uuid(),
+            ${c.nhtsaId},
+            ${c.odiNumber},
+            ${c.manufacturer},
+            ${c.make},
+            ${c.model},
+            ${c.year},
+            ${c.component},
+            ${c.description},
+            ${c.crash},
+            ${c.fire},
+            ${c.injuries},
+            ${c.deaths},
+            ${c.failDate},
+            ${c.dateAdded},
+            ${embeddingVector}::vector,
+            NOW(),
+            NOW()
+          )
+          ON CONFLICT ("nhtsaId") DO NOTHING
+        `;
 
         count++;
       } catch (error) {

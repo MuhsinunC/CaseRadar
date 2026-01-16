@@ -46,13 +46,48 @@ export interface HealthStatus {
   redis_connected: boolean;
 }
 
+/**
+ * Blocked K8s URL patterns - these should NEVER be used for embeddings.
+ * The K8s embedding service is DEPRECATED. Use local GPU/CPU service only.
+ */
+const BLOCKED_K8S_PATTERNS = [
+  '.svc.cluster.local',
+  'embedding-service.embedding',
+  'embedding.svc',
+  ':8090', // K8s port-forward port
+];
+
+/**
+ * Validate that a URL is not pointing to the deprecated K8s embedding service.
+ * Throws an error if a K8s URL pattern is detected.
+ */
+function validateNotK8sUrl(url: string): void {
+  const lowerUrl = url.toLowerCase();
+  for (const pattern of BLOCKED_K8S_PATTERNS) {
+    if (lowerUrl.includes(pattern.toLowerCase())) {
+      throw new Error(
+        `BLOCKED: Detected K8s embedding service URL pattern "${pattern}" in "${url}". ` +
+          `The K8s embedding service is DEPRECATED. ` +
+          `Use the local GPU/CPU service at localhost:8080 instead. ` +
+          `See services/embedding-service/README.md for details.`
+      );
+    }
+  }
+}
+
 export class ScalableEmbeddingClient {
   private baseUrl: string;
   private timeout: number;
 
   constructor(baseUrl: string = 'http://localhost:8080', timeout: number = 30000) {
+    // SAFETY: Block any K8s URLs - the K8s embedding service is DEPRECATED
+    validateNotK8sUrl(baseUrl);
+
     this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
     this.timeout = timeout;
+
+    // Log which service is being used
+    console.log(`[Embedding] Using service at: ${this.baseUrl}`);
   }
 
   /**

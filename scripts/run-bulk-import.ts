@@ -3,12 +3,16 @@
  * Run Bulk Import Script
  *
  * Runs the NHTSA bulk import to populate the database with 2M+ complaints.
+ * This imports complaint data WITHOUT embeddings - run run-embeddings.ts after.
  *
  * Usage:
- *   DATABASE_URL="postgresql://..." npx tsx scripts/run-bulk-import.ts
+ *   npx tsx scripts/run-bulk-import.ts
  *
- * For K8s (with port-forward active):
- *   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/caseradar" npx tsx scripts/run-bulk-import.ts
+ * IMPORTANT: After import, run embeddings with 100% SLA:
+ *   npx tsx scripts/run-embeddings.ts
+ *
+ * NOTE: The K8s embedding service is DEPRECATED and blocked.
+ *       Always use the local GPU/CPU service (localhost:8080).
  */
 
 import { runBulkImport, isBulkImportNeeded, getImportStatus } from '../src/lib/nhtsa/bulk-import';
