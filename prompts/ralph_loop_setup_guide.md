@@ -2,6 +2,83 @@
 
 Quick reference for setting up Ralph loops correctly. Copy this file to any project.
 
+---
+
+## Quick Reference
+
+```bash
+# Command format
+/ralph-loop:ralph-loop "$(cat .claude/task-loop.md)" --max-iterations 10 --completion-promise "TASK_DONE"
+
+# Cancel a loop
+/ralph-loop:cancel-ralph
+
+# Required files
+1. Prompt file (.claude/task-loop.md) - starts with "ultrathink:"
+2. Implementation plan (.claude/task-plan.md) - TDD structure with notes
+
+# Order of operations
+Research → Failing Tests → Implementation → Playwright Tests → Integration → Commit+Push
+
+# Key rules
+- Tests must FAIL before implementing
+- Notes go under each task
+- Must commit AND push
+- Playwright before browser tool
+```
+
+---
+
+## How This Guide Is Used
+
+When you want to implement a feature:
+
+1. **You describe the feature**: "Make a Ralph loop to implement caching for the most commonly requested database operations"
+
+2. **Claude reads this guide and creates TWO files**:
+   - **Implementation plan** (`.claude/caching-plan.md`) - Comprehensive, meant to be iterated on
+   - **Prompt file** (`.claude/caching-loop.md`) - Starts with `ultrathink:`
+
+3. **The Ralph loop runs**, iterating on the implementation plan until complete
+
+4. **The research phase can improve the plan itself** - It's not just about understanding code, but also refining the implementation approach
+
+---
+
+## Prompt Engineering Phrases
+
+Use these in the prompt file to improve reasoning:
+
+**For step-by-step thinking:**
+- "Think through this step by step"
+- "Don't skip steps - walk through the full logic"
+- "Verify your assumptions before proceeding"
+
+**For analysis and planning:**
+- "Before implementing, analyze the existing code patterns first"
+- "List the pros and cons of each approach"
+- "What could go wrong with this approach?"
+- "Consider at least 3 different ways to solve this"
+
+**For thoroughness:**
+- "Check for edge cases"
+- "Consider edge cases carefully"
+- "Double-check this against the existing codebase"
+
+**For depth:**
+- "Explain your reasoning"
+- "Why is this the best approach?"
+- "What are the tradeoffs?"
+- "Reason through the tradeoffs before deciding"
+- "Think about maintainability and future changes"
+
+**For caution:**
+- "Be careful not to break existing functionality"
+- "Consider backwards compatibility"
+- "What dependencies might this affect?"
+
+---
+
 ## Required Components
 
 Every Ralph loop needs **two files**:
@@ -42,6 +119,19 @@ This is why:
 
 ---
 
+## Do NOT
+
+- Implement before tests fail (TDD red phase first)
+- Skip the research phase
+- Add features not in the plan (scope creep)
+- Mark complete with failing tests
+- Forget to push
+- Repeat approaches that already failed (check notes!)
+- Use browser tool before Playwright tests pass
+- Output the completion promise until Definition of Done is verified
+
+---
+
 ## Prompt File Structure
 
 The prompt file **must** start with `ultrathink:` as the very first characters:
@@ -57,6 +147,13 @@ Brief description of what needs to be accomplished.
 ## Files
 - Implementation plan: `.claude/my-task-plan.md`
 
+## Thinking Guidelines
+- Think through each step carefully before acting
+- Consider edge cases and what could go wrong
+- Analyze existing code patterns before implementing
+- Reason through tradeoffs before deciding
+- Be careful not to break existing functionality
+
 ## Instructions
 1. Read the relevant section of the implementation plan
 2. Check notes under that section for previous attempts
@@ -71,13 +168,14 @@ Brief description of what needs to be accomplished.
 If you've tried multiple approaches without progress:
 1. Document the blocker clearly in notes
 2. List all approaches attempted with iteration numbers
-3. Hypothesize why they failed
-4. Suggest alternative approaches for next iteration
-5. Consider if the task needs to be broken down further
+3. Hypothesize why they failed - what could go wrong?
+4. Consider at least 3 different ways to solve this
+5. Suggest alternative approaches for next iteration
+6. Consider if the task needs to be broken down further
 
 ## Completion Criteria
 - All tasks in the implementation plan are done
-- ALL tests have been run AND pass
+- ALL tests have been run AND pass (Playwright + unit + integration)
 - All changes are committed AND pushed to remote
 - Definition of Done checklist is complete
 
@@ -93,6 +191,8 @@ This promise MUST match the --completion-promise parameter exactly.
 
 The implementation plan follows **Test-Driven Development (TDD)** with **hierarchical notes under each task**.
 
+The plan is meant to be **iterated on and improved** during the loop. The research phase can refine the plan itself.
+
 ### Key Principles
 
 1. **Notes go under each task, not in a separate section**
@@ -106,12 +206,21 @@ The implementation plan follows **Test-Driven Development (TDD)** with **hierarc
    - Verify it fails (red phase)
    - Only then implement to make it pass (green phase)
 
-3. **End with commit and push**
+3. **Playwright before browser tool**
+   - Use Playwright for programmatic browser testing (faster, repeatable)
+   - Playwright tests must pass first
+   - Browser tool only if manual verification needed after Playwright passes
+
+4. **End with commit and push**
    - Loop is NOT complete until changes are pushed
 
-4. **Checkpoints for long tasks**
+5. **Checkpoints for long tasks**
    - Commit at logical checkpoints
    - Don't wait until the end to commit
+
+6. **No scope creep**
+   - Only implement what's in the plan
+   - Note "Future Work" ideas but don't implement them
 
 ### Template
 
@@ -121,20 +230,52 @@ The implementation plan follows **Test-Driven Development (TDD)** with **hierarc
 ## Overview
 What we're building and why.
 
+## Progress Summary
+- Current Phase: (1. Research / 2. Tests / 3. Implementation / etc.)
+- Tasks Complete: X/Y
+- Last Updated: Iteration N
+- Blockers: (None / description)
+
+## Files Changed
+- Created: (list new files)
+- Modified: (list changed files)
+- Deleted: (list removed files)
+
+## Future Work (Out of Scope)
+- (Ideas discovered but NOT implementing in this loop)
+
+---
+
+## 0. Environment Setup (If Needed)
+
+- [ ] Environment variables configured
+  - Notes: (which env vars needed)
+- [ ] Dependencies installed
+  - Notes: (npm install, pip install, etc.)
+- [ ] Services running
+  - Notes: (databases, APIs, etc.)
+
 ---
 
 ## 1. Research Phase (COMPLETE BEFORE ANY IMPLEMENTATION)
+
+Research serves two purposes:
+1. Understand the codebase and external tools
+2. **Refine and improve this implementation plan**
 
 ### 1.1. Codebase Understanding
 - [ ] Review existing code for similar/related functionality
   - Notes: (what you found, what already exists)
   - Iteration N: (findings)
+  - Consider: What patterns does this codebase use?
 - [ ] Identify what already exists to avoid duplicate work
   - Notes: (existing implementations discovered)
+  - Double-check against existing code before proceeding
 - [ ] Understand current patterns and conventions
   - Notes: (patterns to follow)
 - [ ] Map integration points
   - Notes: (where this connects to existing code)
+  - What dependencies might this affect?
 
 ### 1.2. External Research
 - [ ] Research required APIs/SDKs
@@ -146,6 +287,12 @@ What we're building and why.
 - [ ] Check for existing solutions/examples
   - Notes: (examples found, repos referenced)
 
+### 1.3. Plan Refinement
+- [ ] Update this plan based on research findings
+  - Notes: (what was changed in the plan)
+  - List pros and cons of the chosen approach
+  - Why is this the best approach?
+
 ---
 
 ## 2. Write Failing Tests First (TDD Red Phase)
@@ -153,6 +300,7 @@ What we're building and why.
 ### 2.1. Feature A Tests
 - [ ] Write test for feature A
   - Notes: (test file location, what it tests)
+  - Think through edge cases carefully
 - [ ] Verify test FAILS before implementation
   - Notes: (failure message observed)
   - 2.1.a. If test passes unexpectedly: investigate why (might already be implemented)
@@ -163,7 +311,14 @@ What we're building and why.
 - [ ] Verify test FAILS before implementation
   - Notes: (failure message observed)
 
-### 2.3. Checkpoint: Tests Written
+### 2.3. Playwright Tests (If UI/Browser Needed)
+- [ ] Write Playwright test for browser functionality
+  - Notes: (test file, what it tests)
+  - Playwright is faster and programmatic - use it before browser tool
+- [ ] Verify Playwright test FAILS before implementation
+  - Notes: (failure message)
+
+### 2.4. Checkpoint: Tests Written
 - [ ] All tests written and verified failing
 - [ ] Commit checkpoint: `test: add failing tests for [feature]`
   - Notes: (commit hash)
@@ -175,6 +330,7 @@ What we're building and why.
 ### 3.1. Implement Feature A
 - [ ] Write minimal code to make test pass
   - Notes: (approach taken)
+  - Be careful not to break existing functionality
   - 3.1.a. Attempts:
     - 3.1.a.i. Iteration N - First attempt: (what you tried)
     - 3.1.a.ii. Result: (passed/failed, why)
@@ -191,12 +347,14 @@ What we're building and why.
 ### 3.2. Implement Feature B
 - [ ] Write minimal code to make test pass
   - Notes: (approach taken)
+  - Consider backwards compatibility
 - [ ] Verify test passes
   - Notes: (test output)
 
 ### 3.3. Refactor (TDD Refactor Phase)
 - [ ] Clean up code while keeping tests green
   - Notes: (refactoring done)
+  - Think about maintainability and future changes
 - [ ] All tests still pass after refactor
   - Notes: (test results)
 
@@ -210,26 +368,50 @@ What we're building and why.
 
 ## 4. Integration & Browser Testing
 
-### 4.1. Integration Tests
+### 4.1. Unit Tests
+- [ ] Run all unit tests
+  - Notes: (results)
+- [ ] All unit tests pass
+  - Notes: (final count)
+
+### 4.2. Playwright Tests (Browser - Programmatic)
+- [ ] Run Playwright tests
+  - Notes: (results)
+  - Playwright is faster and repeatable - run these first
+- [ ] All Playwright tests pass
+  - Notes: (final count)
+
+### 4.3. Integration Tests
 - [ ] Run all integration tests
   - Notes: (results, any failures)
 - [ ] All integration tests pass
   - Notes: (final results)
 
-### 4.2. Browser Tests (if applicable)
+### 4.4. Browser Tool Verification (Only If Needed)
+Only use browser tool if:
+- Playwright tests all pass AND
+- Manual verification is needed for something Playwright can't test
+
 - [ ] Use browser tool to verify UI functionality
-  - Notes: (what was tested)
-- [ ] All browser tests pass
+  - Notes: (what was tested, why browser tool was needed)
+- [ ] Browser verification complete
   - Notes: (results)
 
-### 4.3. If Existing Tests Break
+### 4.5. Manual Verification (If Applicable)
+- [ ] Verify feature works as expected manually
+  - Notes: (what was verified, how)
+- [ ] Edge cases checked
+  - Notes: (edge cases tested)
+
+### 4.6. If Existing Tests Break
 - [ ] Document which tests broke
   - Notes: (test names, error messages)
 - [ ] Investigate why
   - Notes: (root cause)
+  - What dependencies did this affect?
 - [ ] Fix without breaking functionality
   - Notes: (approach taken)
-  - 4.3.a. If rollback needed: `git stash` or `git checkout -- <file>`
+  - 4.6.a. If rollback needed: `git stash` or `git checkout -- <file>`
 
 ---
 
@@ -249,11 +431,26 @@ What we're building and why.
 
 ---
 
+## Validation Commands
+
+```bash
+# Run these to verify completion
+npm test              # or: pytest, go test, etc.
+npm run test:e2e      # Playwright tests
+npm run lint          # Linting
+npm run typecheck     # Type checking (if applicable)
+git status            # Should be clean
+git push              # Should succeed
+```
+
+---
+
 ## Definition of Done (Check ALL Before Promise)
 
 - [ ] All task checkboxes marked [x]
-- [ ] All tests have been run
-- [ ] All tests pass (0 failures, 0 errors)
+- [ ] All unit tests pass
+- [ ] All Playwright tests pass
+- [ ] All integration tests pass
 - [ ] No linter errors
 - [ ] `git status` shows clean working tree
 - [ ] `git push` succeeded
@@ -274,15 +471,20 @@ If after multiple iterations you're not making progress:
 - **Attempts made**:
   - Iteration X: Tried A, failed because B
   - Iteration Y: Tried C, failed because D
+- **What could go wrong?**: (analysis of failure modes)
 - **Hypotheses for failure**:
   1. (why it might not be working)
   2. (alternative theory)
-- **Suggested next steps**:
-  1. (approach to try)
-  2. (fallback approach)
+- **At least 3 different approaches to try**:
+  1. (approach 1)
+  2. (approach 2)
+  3. (approach 3)
+- **Pros and cons of each approach**:
+  - Approach 1: pros/cons
+  - Approach 2: pros/cons
+  - Approach 3: pros/cons
 - **Should this task be broken down?**: Yes/No
   - If yes: (proposed subtasks)
-```
 ```
 
 ---
@@ -298,10 +500,12 @@ Why this matters:
 - Prevents bugs from conflicting implementations
 - Saves time by understanding the landscape first
 - Identifies the right approach before committing to it
+- **Refines the implementation plan itself**
 
 Research includes:
 - **Codebase**: What already exists? What patterns are used?
 - **External**: APIs, SDKs, libraries, online documentation
+- **Plan refinement**: Update the plan based on what you learn
 
 ### 2. Tests Must FAIL First (TDD)
 
@@ -315,7 +519,18 @@ This is non-negotiable:
 
 The "red" phase (failing test) proves your test actually tests something.
 
-### 3. Hierarchical Notes Under Each Task
+### 3. Playwright Before Browser Tool
+
+For UI/browser testing:
+
+1. **Write Playwright tests first** - programmatic, fast, repeatable
+2. **Run Playwright tests** - they must pass
+3. **Only then** use browser tool IF manual verification is needed
+4. Browser tool is slower and not repeatable - use sparingly
+
+Playwright can do almost everything browser tool can, but faster and programmatically.
+
+### 4. Hierarchical Notes Under Each Task
 
 **Why this structure?**
 
@@ -351,7 +566,7 @@ This prevents:
 - Forgetting what you learned
 - Losing context between iterations
 
-### 4. Tests Must PASS (Not Just Run)
+### 5. Tests Must PASS (Not Just Run)
 
 The loop is **NOT complete** until:
 - All tests have been executed
@@ -361,7 +576,7 @@ The loop is **NOT complete** until:
 
 Running tests that fail does not count as completion.
 
-### 5. Must Commit AND Push
+### 6. Must Commit AND Push
 
 The loop is **NOT complete** until:
 - All changes are staged
@@ -371,7 +586,7 @@ The loop is **NOT complete** until:
 
 This is often forgotten! Add it to your completion criteria.
 
-### 6. Checkpoint Commits
+### 7. Checkpoint Commits
 
 For long tasks, commit at logical checkpoints:
 - After writing failing tests
@@ -381,14 +596,16 @@ For long tasks, commit at logical checkpoints:
 
 This creates a safety net and makes rollbacks easier.
 
-### 7. Browser Testing Available
+### 8. No Scope Creep
 
-For UI or web-related tasks:
-- The **browser tool** is available for actual browser tests
-- Use it to verify UI functionality works in a real browser
-- Include browser tests in Section 4
+Do NOT add features not in the original plan.
 
-### 8. Rollback Protocol
+If you discover something that "should" be added:
+1. Note it in "Future Work (Out of Scope)" section
+2. Do NOT implement it in this loop
+3. Stay focused on the defined tasks
+
+### 9. Rollback Protocol
 
 If your implementation breaks existing tests:
 
@@ -412,6 +629,26 @@ File: `.claude/feature-x-plan.md`
 ## Overview
 Add user authentication with JWT tokens.
 
+## Progress Summary
+- Current Phase: 1. Research
+- Tasks Complete: 0/20
+- Last Updated: Iteration 0
+- Blockers: None
+
+## Files Changed
+- Created: (none yet)
+- Modified: (none yet)
+
+## Future Work (Out of Scope)
+- (none yet)
+
+---
+
+## 0. Environment Setup
+
+- [ ] JWT_SECRET env var configured
+  - Notes:
+
 ---
 
 ## 1. Research Phase
@@ -419,6 +656,7 @@ Add user authentication with JWT tokens.
 ### 1.1. Codebase Understanding
 - [ ] Check if auth already exists
   - Notes:
+  - Double-check before implementing
 - [ ] Review existing user model
   - Notes:
 - [ ] Check API patterns used
@@ -429,6 +667,11 @@ Add user authentication with JWT tokens.
   - Notes:
   - 1.2.a. Libraries considered:
   - 1.2.b. Library chosen and why:
+  - List pros and cons of each
+
+### 1.3. Plan Refinement
+- [ ] Update plan based on research
+  - Notes:
 
 ---
 
@@ -437,6 +680,7 @@ Add user authentication with JWT tokens.
 ### 2.1. Registration Test
 - [ ] Write test: user can register
   - Notes:
+  - Check for edge cases
 - [ ] Verify test fails
   - Notes:
 
@@ -452,7 +696,13 @@ Add user authentication with JWT tokens.
 - [ ] Verify test fails
   - Notes:
 
-### 2.4. Checkpoint
+### 2.4. Playwright Test
+- [ ] Write Playwright test for login UI
+  - Notes:
+- [ ] Verify test fails
+  - Notes:
+
+### 2.5. Checkpoint
 - [ ] Commit: `test: add failing auth tests`
   - Notes:
 
@@ -463,6 +713,7 @@ Add user authentication with JWT tokens.
 ### 3.1. Implement Registration
 - [ ] Make registration test pass
   - Notes:
+  - Be careful not to break existing functionality
   - 3.1.a. Approach:
   - 3.1.b. Issues encountered:
 - [ ] Test passes
@@ -488,14 +739,20 @@ Add user authentication with JWT tokens.
 
 ## 4. Integration Testing
 
-### 4.1. All Tests
-- [ ] Run full test suite
-  - Notes:
-- [ ] All tests pass
+### 4.1. Unit Tests
+- [ ] All unit tests pass
   - Notes:
 
-### 4.2. Browser Testing
-- [ ] Test login flow in browser
+### 4.2. Playwright Tests
+- [ ] All Playwright tests pass
+  - Notes:
+
+### 4.3. Integration Tests
+- [ ] All integration tests pass
+  - Notes:
+
+### 4.4. Browser Tool (Only If Needed)
+- [ ] Manual browser verification (if Playwright insufficient)
   - Notes:
 
 ---
@@ -514,11 +771,24 @@ Add user authentication with JWT tokens.
 
 ---
 
+## Validation Commands
+
+```bash
+npm test
+npm run test:e2e
+npm run lint
+git status
+git push
+```
+
+---
+
 ## Definition of Done
 
 - [ ] All tasks [x]
-- [ ] All tests run
-- [ ] All tests pass (0 failures)
+- [ ] All unit tests pass
+- [ ] All Playwright tests pass
+- [ ] All integration tests pass
 - [ ] No linter errors
 - [ ] git status clean
 - [ ] git push succeeded
@@ -539,6 +809,15 @@ Implement user authentication following TDD methodology.
 ## Files
 - Plan: `.claude/feature-x-plan.md`
 
+## Thinking Guidelines
+- Think through each step carefully before acting
+- Consider edge cases and what could go wrong
+- Before implementing, analyze existing code patterns first
+- List pros and cons of approaches before deciding
+- Be careful not to break existing functionality
+- Consider backwards compatibility
+- What dependencies might this affect?
+
 ## Instructions
 1. Read the current section of `.claude/feature-x-plan.md`
 2. Check notes under that section for previous attempts
@@ -556,16 +835,21 @@ Implement user authentication following TDD methodology.
 If multiple iterations without progress:
 1. Document blocker with iteration numbers
 2. List all approaches tried
-3. Hypothesize why they failed
-4. Suggest alternatives
-5. Consider breaking down the task
+3. What could go wrong with each approach?
+4. Consider at least 3 different ways to solve this
+5. List pros and cons of each approach
+6. Suggest the best alternative
+7. Consider breaking down the task
 
 ## Important Rules
 - Complete Section 1 (Research) before any implementation
+- Research can also refine the implementation plan itself
 - Tests must FAIL before you implement (TDD red phase)
+- Playwright tests before browser tool
 - Add notes under each task with iteration numbers
 - Log errors with file, line, cause, fix
 - Commit at checkpoints, not just at the end
+- Do NOT add features not in the plan (scope creep)
 - Do NOT mark complete until all tests PASS
 - Do NOT mark complete until changes are PUSHED
 - Verify Definition of Done before outputting promise
@@ -573,7 +857,7 @@ If multiple iterations without progress:
 ## Completion Promise
 Output `<promise>FEATURE_X_DONE</promise>` when:
 - All tasks complete
-- All tests pass (green)
+- All tests pass (unit + Playwright + integration)
 - All changes committed and pushed
 - Definition of Done verified
 ```
@@ -601,9 +885,10 @@ Output `<promise>FEATURE_X_DONE</promise>` when:
 | Notes in separate section | Hard to find context | Put notes under each task |
 | No iteration numbers | Can't track progress | Include iteration N in notes |
 | Tests run but fail | Premature completion | Tests must PASS, not just run |
+| Browser tool before Playwright | Slower, not repeatable | Playwright tests first, browser tool only if needed |
 | Changes not pushed | Incomplete work | Must commit AND push |
 | No checkpoint commits | Hard to rollback | Commit at logical checkpoints |
-| Forgetting browser tests | UI bugs missed | Use browser tool for UI tasks |
+| Scope creep | Feature bloat | Only implement what's in the plan |
 | Repeating failed approaches | Wasted iterations | Document what didn't work and why |
 | No error details | Can't debug later | Log error, file, line, cause, fix |
 
@@ -614,19 +899,28 @@ Output `<promise>FEATURE_X_DONE</promise>` when:
 Before starting a Ralph loop, verify:
 
 - [ ] Created implementation plan with TDD structure
-- [ ] Plan has Section 1 for research (codebase + external)
-- [ ] Plan has Section 2 for writing FAILING tests first
+- [ ] Plan has Progress Summary section
+- [ ] Plan has Files Changed tracking
+- [ ] Plan has Future Work section (for scope creep prevention)
+- [ ] Plan has Section 0 for environment setup (if needed)
+- [ ] Plan has Section 1 for research (codebase + external + plan refinement)
+- [ ] Plan has Section 2 for writing FAILING tests first (including Playwright)
 - [ ] Plan has checkpoint commits throughout
+- [ ] Plan has Playwright tests before browser tool
 - [ ] Plan has Section 5 for commit AND push
+- [ ] Plan has Validation Commands
 - [ ] Plan has Definition of Done checklist
 - [ ] Notes go under each task (hierarchical: 1.a., 1.a.i., etc.)
 - [ ] Created prompt file starting with `ultrathink:`
+- [ ] Prompt has Thinking Guidelines with reasoning prompts
 - [ ] Prompt instructs to read plan file section by section
 - [ ] Prompt instructs to include iteration numbers in notes
 - [ ] Prompt instructs to verify tests FAIL before implementing
 - [ ] Prompt instructs to log errors with full details
 - [ ] Prompt has "When Stuck" protocol
 - [ ] Prompt specifies tests must PASS (not just run)
+- [ ] Prompt specifies Playwright before browser tool
+- [ ] Prompt specifies no scope creep
 - [ ] Prompt specifies must commit AND push
 - [ ] Prompt specifies to verify Definition of Done
 - [ ] `--max-iterations` is set (minimum 10)
@@ -638,7 +932,7 @@ Before starting a Ralph loop, verify:
 ## Cancelling a Loop
 
 ```bash
-/cancel-ralph
+/ralph-loop:cancel-ralph
 ```
 
 ---
