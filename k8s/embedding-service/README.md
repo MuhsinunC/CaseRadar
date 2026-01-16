@@ -1,4 +1,31 @@
-# Embedding Service on Kubernetes
+# ⚠️ DEPRECATED - Kubernetes Embedding Service
+
+> **WARNING: This Kubernetes architecture is DEPRECATED and NOT USED by the product.**
+>
+> This folder is kept **only as a reference/archive** for reusing K8s patterns in other parts
+> of the infrastructure. The embedding service deployed here is **never called** by CaseRadar.
+>
+> ## Actual Embedding Architecture (What the Product Uses)
+>
+> The product uses the local Python embedding service with:
+> - **Primary**: GPU generation (MPS on Mac, CUDA on Linux)
+> - **Fallback**: Multi-threaded CPU generation
+>
+> See `services/embedding-service/README.md` for the actual architecture.
+>
+> ## Why This Is Here
+>
+> This K8s configuration is archived for:
+> 1. Reference when deploying other CaseRadar services to K8s
+> 2. Potential future use if we need distributed embedding at scale
+> 3. Learning/documentation purposes
+>
+> **DO NOT** point `EMBEDDING_SERVICE_URL` to any K8s endpoint for the embedding service.
+> The default (`localhost:8080`) points to the correct local service.
+
+---
+
+# (Archived) Embedding Service on Kubernetes
 
 This deploys the embedding service to a local Kubernetes cluster with auto-scaling.
 

@@ -238,11 +238,15 @@ let defaultClient: ScalableEmbeddingClient | null = null;
  * Get the default scalable embedding client.
  * Uses EMBEDDING_SERVICE_URL environment variable or defaults to localhost:8080.
  *
- * For local development with Docker Compose scaling:
- *   EMBEDDING_SERVICE_URL=http://localhost:8080 (Traefik load balancer)
+ * The embedding service uses:
+ * - Primary: GPU generation (MPS on Mac, CUDA on Linux)
+ * - Fallback: Multi-threaded CPU generation
  *
- * For production with Kubernetes:
- *   EMBEDDING_SERVICE_URL=http://embedding-service (K8s Service)
+ * Default URL (localhost:8080) points to the local Python embedding service.
+ * See services/embedding-service/README.md for details.
+ *
+ * NOTE: The k8s/embedding-service/ folder is DEPRECATED and kept only as
+ * reference for other K8s deployments. Do NOT use K8s endpoints for embeddings.
  */
 export function getScalableClient(): ScalableEmbeddingClient {
   if (!defaultClient) {

@@ -1,5 +1,15 @@
 # Embedding Service
 
+> **This is the PRODUCTION embedding service for CaseRadar.**
+>
+> **Architecture:**
+> - **Primary**: GPU generation (MPS on Mac, CUDA on Linux)
+> - **Fallback**: Multi-threaded CPU generation
+>
+> **Important:** The `k8s/embedding-service/` folder is **DEPRECATED** and kept only as a
+> reference for other K8s deployments. The product always uses this local Python service
+> (localhost:8080), never K8s endpoints.
+
 High-performance text embedding service using `nomic-ai/nomic-embed-text-v1.5` with automatic GPU/CPU detection and device-optimized batch sizes.
 
 ## Performance
