@@ -21,6 +21,8 @@ Quick reference for setting up Ralph loops correctly. Copy this file to any proj
 Research → Failing Tests → Implementation → Playwright Tests → Integration → Commit+Push
 
 # Key rules
+- Create to-do list (TodoWrite) when starting each task
+- Save to-do items as children in the plan
 - Tests must FAIL before implementing
 - Notes go under each task
 - Must commit AND push
@@ -157,12 +159,17 @@ Brief description of what needs to be accomplished.
 ## Instructions
 1. Read the relevant section of the implementation plan
 2. Check notes under that section for previous attempts
-3. Complete the next incomplete task
-4. Add notes under that task (include iteration number)
+3. For the next incomplete task:
+   a. Think through and create a to-do list using TodoWrite
+   b. Save the exact to-do list items as children in the plan
+   c. Work through completing each to-do item
+   d. Mark items complete in both TodoWrite AND the plan
+4. Add notes under the task (include iteration number)
 5. Run tests and verify they pass
-6. Continue until all tasks done
-7. Commit and push all changes
-8. Verify Definition of Done checklist
+6. After task to-do list is done, move to the next task
+7. Continue until all tasks done
+8. Commit and push all changes
+9. Verify Definition of Done checklist
 
 ## When Stuck
 If you've tried multiple approaches without progress:
@@ -195,32 +202,72 @@ The plan is meant to be **iterated on and improved** during the loop. The resear
 
 ### Key Principles
 
-1. **Notes go under each task, not in a separate section**
+1. **Task-level to-do lists**
+   - When starting a task, think through and create a to-do list using TodoWrite
+   - Save the exact to-do list items as children under that task in the plan
+   - Work through completing the entire to-do list
+   - Mark items complete in both TodoWrite AND the plan
+   - After the to-do list is done, move on to the next task
+   - This provides visible progress tracking for both you and the user
+
+2. **Notes go under each task, not in a separate section**
    - Each task can have sub-notes (1.a., 1.a.i., etc.)
    - Include iteration numbers in notes
    - This keeps context close to the work
    - You only need to read the relevant section, not the whole file
 
-2. **Tests must be FAILING before implementation**
+4. **Tests must be FAILING before implementation**
    - Write the test first
    - Verify it fails (red phase)
    - Only then implement to make it pass (green phase)
 
-3. **Playwright before browser tool**
+5. **Playwright before browser tool**
    - Use Playwright for programmatic browser testing (faster, repeatable)
    - Playwright tests must pass first
    - Browser tool only if manual verification needed after Playwright passes
 
-4. **End with commit and push**
+6. **End with commit and push**
    - Loop is NOT complete until changes are pushed
 
-5. **Checkpoints for long tasks**
+7. **Checkpoints for long tasks**
    - Commit at logical checkpoints
    - Don't wait until the end to commit
 
-6. **No scope creep**
+8. **No scope creep**
    - Only implement what's in the plan
    - Note "Future Work" ideas but don't implement them
+
+### Task-Level To-Do List Workflow Example
+
+When you start working on a task like "3.1. Implement Feature A":
+
+**Step 1: Create to-do list with TodoWrite**
+```
+TodoWrite: [
+  { content: "Read existing auth code patterns", status: "pending" },
+  { content: "Create AuthService class", status: "pending" },
+  { content: "Add login method", status: "pending" },
+  { content: "Add logout method", status: "pending" },
+  { content: "Run tests to verify", status: "pending" }
+]
+```
+
+**Step 2: Save these items as children in the implementation plan**
+```markdown
+### 3.1. Implement Feature A
+- [ ] Read existing auth code patterns
+- [ ] Create AuthService class
+- [ ] Add login method
+- [ ] Add logout method
+- [ ] Run tests to verify
+```
+
+**Step 3: Work through each item**
+- Mark items `in_progress` in TodoWrite as you work
+- Mark items `[x]` in the plan when complete
+- Add notes under each item as you go
+
+**Step 4: When task to-do list is complete, move to next task**
 
 ### Template
 
