@@ -8,7 +8,7 @@
 
 import { Readable } from 'stream';
 import { prisma } from '@/lib/db';
-import { parseFlatFileStream, mapFlatFileToComplaint, FlatFileRecord } from './flat-file-parser';
+import { parseFlatFileStream, mapFlatFileToComplaint, FlatFileRecord, isQualityComplaint } from './flat-file-parser';
 import { TransformedComplaint } from './types';
 import { downloadAndExtract, getFlatFileStream } from './flat-file-downloader';
 import path from 'path';
@@ -27,6 +27,7 @@ export interface ImportProgress {
   recordsProcessed: number;
   recordsInserted: number;
   recordsSkipped: number;
+  recordsRejected: number;  // Records rejected due to data quality issues
   recordsErrored: number;
   batchNumber: number;
   estimatedTotal: number;
@@ -44,6 +45,7 @@ export interface ImportResult {
   recordsProcessed: number;
   recordsInserted: number;
   recordsSkipped: number;
+  recordsRejected: number;  // Records rejected due to data quality issues
   recordsErrored: number;
   durationMs: number;
   errors: string[];
@@ -97,6 +99,7 @@ export class BulkImportService {
       recordsProcessed: 0,
       recordsInserted: 0,
       recordsSkipped: 0,
+      recordsRejected: 0,
       recordsErrored: 0,
       batchNumber: 0,
       estimatedTotal: ESTIMATED_TOTAL_RECORDS,
@@ -136,6 +139,13 @@ export class BulkImportService {
         try {
           // Map flat file record to complaint
           const complaint = mapFlatFileToComplaint(record);
+
+          // Data quality validation - reject bad records
+          if (!isQualityComplaint(complaint)) {
+            this.currentProgress.recordsRejected++;
+            this.currentProgress.recordsProcessed++;
+            continue;
+          }
 
           // Check for duplicates if enabled
           if (skipDuplicates) {
@@ -192,6 +202,7 @@ export class BulkImportService {
         recordsProcessed: this.currentProgress.recordsProcessed,
         recordsInserted: this.currentProgress.recordsInserted,
         recordsSkipped: this.currentProgress.recordsSkipped,
+        recordsRejected: this.currentProgress.recordsRejected,
         recordsErrored: this.currentProgress.recordsErrored,
         durationMs: Date.now() - startTime,
         errors,
@@ -204,6 +215,7 @@ export class BulkImportService {
         recordsProcessed: this.currentProgress.recordsProcessed,
         recordsInserted: this.currentProgress.recordsInserted,
         recordsSkipped: this.currentProgress.recordsSkipped,
+        recordsRejected: this.currentProgress.recordsRejected,
         recordsErrored: this.currentProgress.recordsErrored,
         durationMs: Date.now() - startTime,
         errors,
@@ -416,6 +428,7 @@ export async function runBulkImport(): Promise<ImportResult> {
       recordsProcessed: result.recordsProcessed.toLocaleString(),
       recordsInserted: result.recordsInserted.toLocaleString(),
       recordsSkipped: result.recordsSkipped.toLocaleString(),
+      recordsRejected: result.recordsRejected.toLocaleString(),
       recordsErrored: result.recordsErrored.toLocaleString(),
       durationMs: result.durationMs,
     });
@@ -435,6 +448,7 @@ export async function runBulkImport(): Promise<ImportResult> {
       recordsProcessed: currentImportProgress?.recordsProcessed || 0,
       recordsInserted: currentImportProgress?.recordsInserted || 0,
       recordsSkipped: currentImportProgress?.recordsSkipped || 0,
+      recordsRejected: currentImportProgress?.recordsRejected || 0,
       recordsErrored: currentImportProgress?.recordsErrored || 0,
       durationMs: currentImportProgress?.elapsedMs || 0,
       errors: [error instanceof Error ? error.message : String(error)],

@@ -205,6 +205,76 @@ function parseYear(yearStr: string): number | null {
 }
 
 /**
+ * Validation result for a complaint record
+ */
+export interface ValidationResult {
+  isValid: boolean;
+  errors: string[];
+}
+
+/**
+ * Validate a transformed complaint for data quality
+ * Returns validation result with specific error messages
+ * @param complaint - Transformed complaint to validate
+ * @returns Validation result with isValid flag and error messages
+ */
+export function validateComplaint(complaint: TransformedComplaint): ValidationResult {
+  const errors: string[] = [];
+
+  // Year validation: must be present and valid
+  if (complaint.year === null || complaint.year === undefined) {
+    errors.push('Missing or invalid year');
+  }
+
+  // Description validation: must be meaningful text (not just numbers)
+  if (!complaint.description || complaint.description.trim().length < 20) {
+    errors.push('Description too short (must be at least 20 characters)');
+  } else if (/^\d+$/.test(complaint.description.trim())) {
+    errors.push('Description appears to be numeric only (likely mileage, not a complaint)');
+  }
+
+  // Component validation: must not be "0" or empty
+  if (!complaint.component || complaint.component === '0' || complaint.component.trim().length < 2) {
+    errors.push('Missing or invalid component');
+  }
+
+  // Make/Model validation: must be present
+  if (!complaint.make || complaint.make.trim().length < 2) {
+    errors.push('Missing or invalid make');
+  }
+  if (!complaint.model || complaint.model.trim().length < 1) {
+    errors.push('Missing or invalid model');
+  }
+
+  // Manufacturer validation: should not be numeric-only (indicates bad column mapping)
+  if (complaint.manufacturer && /^\d+$/.test(complaint.manufacturer.trim())) {
+    errors.push('Manufacturer appears to be numeric ID instead of name');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Check if a complaint passes minimum quality thresholds
+ * Quick validation for filtering during import
+ */
+export function isQualityComplaint(complaint: TransformedComplaint): boolean {
+  return (
+    complaint.year !== null &&
+    complaint.year !== undefined &&
+    complaint.description !== null &&
+    complaint.description.length >= 20 &&
+    !/^\d+$/.test(complaint.description.trim()) &&
+    complaint.component !== null &&
+    complaint.component !== '0' &&
+    complaint.component.length >= 2
+  );
+}
+
+/**
  * Map a flat file record to our TransformedComplaint format
  * @param record - Raw flat file record
  * @returns Transformed complaint ready for database insertion
