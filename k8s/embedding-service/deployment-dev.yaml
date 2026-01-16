@@ -1,0 +1,80 @@
+# Development deployment with hot-reload (code mounted from host)
+# Usage: kubectl apply -f k8s/embedding-service/deployment-dev.yaml
+# Changes to main.py are reflected INSTANTLY without rebuild!
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedding-service
+  namespace: embedding
+  labels:
+    app: embedding-service
+    mode: development
+spec:
+  replicas: 1  # Single replica for dev
+  strategy:
+    type: Recreate  # Faster than rolling for dev
+  selector:
+    matchLabels:
+      app: embedding-service
+  template:
+    metadata:
+      labels:
+        app: embedding-service
+    spec:
+      containers:
+      - name: embedding-worker
+        image: python:3.11-slim
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          pip install fastapi uvicorn sentence-transformers redis prometheus_client pydantic numpy --quiet
+          cd /app && uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+        ports:
+        - containerPort: 8080
+          name: http
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "100m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        env:
+        - name: MODEL_NAME
+          value: "nomic-ai/nomic-embed-text-v1.5"
+        - name: MAX_BATCH_SIZE
+          value: "500"
+        - name: EMBEDDING_WORKERS
+          value: "1"
+        - name: HF_HOME
+          value: "/model-cache"
+        - name: TRANSFORMERS_CACHE
+          value: "/model-cache"
+        - name: SENTENCE_TRANSFORMERS_HOME
+          value: "/model-cache"
+        volumeMounts:
+        - name: app-code
+          mountPath: /app
+        - name: model-cache
+          mountPath: /model-cache
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
+      volumes:
+      - name: app-code
+        hostPath:
+          path: /hosthome/user/Documents/Muhsinun/Projects/GitHub/CaseRadar/services/embedding-service
+          type: Directory
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-cache

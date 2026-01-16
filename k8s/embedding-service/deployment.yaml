@@ -8,6 +8,11 @@ metadata:
     component: ml
 spec:
   replicas: 1  # Baseline - HPA scales from here
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 3           # Create 3 new pods at once
+      maxUnavailable: 0     # Keep old pods running until new ones ready
   selector:
     matchLabels:
       app: embedding-service
@@ -29,19 +34,22 @@ spec:
           name: http
         resources:
           requests:
-            memory: "1Gi"    # Model takes ~900Mi, leave headroom
-            cpu: "200m"      # Low request allows more pods to schedule
+            memory: "1Gi"    # Single worker ~900MB
+            cpu: "100m"      # Minimal request, burst when needed
           limits:
-            memory: "2Gi"    # Allow for load-induced memory growth
-            cpu: "2000m"     # Can burst to 2 cores under load
+            memory: "2Gi"    # Headroom for load
+            cpu: "2000m"     # Can burst to 2 cores
         env:
         - name: MODEL_NAME
           value: "nomic-ai/nomic-embed-text-v1.5"
         - name: MAX_BATCH_SIZE
-          value: "500"
+          value: "500"       # Large batches for efficiency
         - name: EMBEDDING_WORKERS
-          value: "1"  # 1 worker per pod, scale with HPA
-        # HuggingFace cache directory - shared across all pods
+          value: "1"         # Single worker - scale with HPA
+        # Lazy loading - pod starts immediately, model loads in background
+        - name: LAZY_LOAD_MODEL
+          value: "true"
+        # HuggingFace cache directory - shared across all pods via PVC
         - name: HF_HOME
           value: "/model-cache"
         - name: TRANSFORMERS_CACHE
@@ -51,30 +59,34 @@ spec:
         volumeMounts:
         - name: model-cache
           mountPath: /model-cache
+        # OPTIMIZED PROBES with lazy loading
+        # livenessProbe: /health - passes when app is running (even if model loading)
         livenessProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 120  # Model download takes time
-          periodSeconds: 30         # Check less frequently under load
-          timeoutSeconds: 30        # Allow more time when CPU-bound
-          failureThreshold: 5       # More tolerance before restart
+          initialDelaySeconds: 5    # App starts in ~2s
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # readinessProbe: /ready - only passes when model is fully loaded
         readinessProbe:
           httpGet:
-            path: /health
+            path: /ready
             port: 8080
-          initialDelaySeconds: 60
-          periodSeconds: 10
-          timeoutSeconds: 15        # Allow more time when CPU-bound
-          failureThreshold: 5
+          initialDelaySeconds: 5    # Start checking after app is up
+          periodSeconds: 2          # Check frequently for fast traffic routing
+          timeoutSeconds: 3
+          failureThreshold: 30      # Allow up to 60s for model to load
+        # startupProbe: /health - allows time for app to start
         startupProbe:
           httpGet:
             path: /health
             port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 60  # Allow up to 10 minutes for first model download
+          initialDelaySeconds: 2    # App starts very quickly
+          periodSeconds: 2
+          timeoutSeconds: 2
+          failureThreshold: 30      # 2 + 30*2 = 62s max startup
       volumes:
       - name: model-cache
         persistentVolumeClaim:

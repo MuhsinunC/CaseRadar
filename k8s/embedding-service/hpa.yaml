@@ -11,10 +11,12 @@ spec:
     kind: Deployment
     name: embedding-service
   # Scaling strategy: maximize CPU utilization up to 90%
-  # HPA will keep adding pods until average pod CPU < 90%
-  # RAM limit: ~8 pods max (8 × 900MB ≈ 7.2GB)
-  minReplicas: 1
-  maxReplicas: 8
+  # 1 worker per pod, each uses ~1 core and ~1GB RAM
+  # 12 CPUs = ~12 pods at full CPU saturation
+  # 60GB RAM / 1.5GB per pod = ~40 pods max (RAM)
+  # CPU is the bottleneck, set max to 20 for faster response
+  minReplicas: 2              # Keep 2 warm for faster response
+  maxReplicas: 20
   metrics:
   - type: Resource
     resource:

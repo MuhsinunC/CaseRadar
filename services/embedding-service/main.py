@@ -22,14 +22,46 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, field_validator
 from sentence_transformers import SentenceTransformer
 import redis.asyncio as redis
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
+
+# Check if running in multi-worker mode (Prometheus disabled in multi-worker)
+EMBEDDING_WORKERS = int(os.getenv("EMBEDDING_WORKERS", "1"))
+PROMETHEUS_ENABLED = EMBEDDING_WORKERS == 1
+
+if PROMETHEUS_ENABLED:
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry, REGISTRY
+else:
+    # Stub classes for multi-worker mode
+    class StubMetric:
+        def labels(self, **kwargs): return self
+        def inc(self, *args, **kwargs): pass
+        def set(self, *args, **kwargs): pass
+        def observe(self, *args, **kwargs): pass
+
+    Counter = Histogram = Gauge = lambda *a, **k: StubMetric()
+    CollectorRegistry = REGISTRY = None
+    generate_latest = lambda r=None: b""
+    CONTENT_TYPE_LATEST = "text/plain"
 
 # Configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 MAX_BATCH_SIZE = int(os.getenv("MAX_BATCH_SIZE", "100"))
 EMBEDDING_DIM = 768
+
+# Device configuration (auto-detect GPU)
+import torch
+def get_device():
+    """Get best available device: MPS (Mac GPU) > CUDA > CPU."""
+    if os.getenv("PYTORCH_DEVICE"):
+        return os.getenv("PYTORCH_DEVICE")
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return "mps"
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+DEVICE = get_device()
 
 # Retry configuration
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
@@ -75,6 +107,7 @@ DLQ_COUNT = Counter(
 # Global state
 model: Optional[SentenceTransformer] = None
 redis_client: Optional[redis.Redis] = None
+model_loading: bool = False  # True while model is being loaded in background
 
 
 # Request/Response models
@@ -166,23 +199,50 @@ class DLQJobResponse(BaseModel):
     failed_at: str
 
 
+# Lazy loading configuration
+LAZY_LOAD_MODEL = os.getenv("LAZY_LOAD_MODEL", "false").lower() == "true"
+
+
+def _load_model_sync():
+    """Synchronously load the model (runs in thread for async context)."""
+    global model, model_loading
+    model_loading = True
+    load_start = time.time()
+    print(f"Loading model: {MODEL_NAME} on device: {DEVICE}")
+    try:
+        loaded = SentenceTransformer(MODEL_NAME, trust_remote_code=True, device=DEVICE)
+        model = loaded
+        MODEL_LOADED.set(1)
+        load_time = time.time() - load_start
+        print(f"Model loaded successfully in {load_time:.1f}s: {MODEL_NAME} on {DEVICE}")
+    except Exception as e:
+        print(f"Failed to load model: {e}")
+        MODEL_LOADED.set(0)
+    finally:
+        model_loading = False
+
+
+async def _load_model_background():
+    """Load model in background thread."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _load_model_sync)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for loading model and connecting to Redis."""
     global model, redis_client
 
-    # Load embedding model
-    print(f"Loading model: {MODEL_NAME}")
-    try:
-        model = SentenceTransformer(MODEL_NAME, trust_remote_code=True)
-        MODEL_LOADED.set(1)
-        print(f"Model loaded successfully: {MODEL_NAME}")
-    except Exception as e:
-        print(f"Failed to load model: {e}")
-        MODEL_LOADED.set(0)
-        raise
+    # Load embedding model (sync or async based on config)
+    if LAZY_LOAD_MODEL:
+        # Start loading in background - pod becomes ready immediately
+        print("LAZY LOAD: Starting model load in background...")
+        asyncio.create_task(_load_model_background())
+    else:
+        # Blocking load - pod ready after model loads
+        _load_model_sync()
 
-    # Connect to Redis
+    # Connect to Redis (non-blocking, best-effort)
     try:
         redis_client = redis.from_url(REDIS_URL, decode_responses=False)
         await redis_client.ping()
@@ -554,7 +614,11 @@ async def delete_dlq_job(job_id: str):
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint for k8s probes."""
+    """Health check endpoint for k8s liveness probe.
+
+    Returns healthy if the app is running (even if model is still loading).
+    For readiness, use /ready endpoint.
+    """
     redis_connected = False
     if redis_client:
         try:
@@ -564,12 +628,27 @@ async def health_check():
             pass
 
     return HealthResponse(
-        status="healthy" if model is not None else "unhealthy",
+        status="healthy" if model is not None else ("loading" if model_loading else "unhealthy"),
         model_loaded=model is not None,
         model_name=MODEL_NAME,
         redis_connected=redis_connected,
         dlq_enabled=DLQ_ENABLED
     )
+
+
+@app.get("/ready")
+async def readiness_check():
+    """Readiness check - returns 200 only when model is fully loaded.
+
+    Use this for k8s readinessProbe to ensure traffic is only routed
+    to pods that can actually serve requests.
+    """
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model not yet loaded" if model_loading else "Model failed to load"
+        )
+    return {"status": "ready", "model_loaded": True}
 
 
 @app.get("/queue/status", response_model=QueueStatusResponse)
@@ -604,6 +683,12 @@ async def queue_status():
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint."""
+    if not PROMETHEUS_ENABLED:
+        return Response(
+            content=b"# Metrics disabled in multi-worker mode",
+            media_type="text/plain"
+        )
+
     # Update queue metrics before returning
     if redis_client:
         try:

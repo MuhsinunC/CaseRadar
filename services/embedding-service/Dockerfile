@@ -16,9 +16,8 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Model downloads at runtime on first request
-# This keeps the image small (~1GB vs ~4GB with pre-downloaded model)
-# For faster startup in production, use a shared PersistentVolume for the model cache
+# Model loads at runtime from shared PVC (not baked into image)
+# This keeps image small and allows single model cache across all pods
 
 # Copy application code
 COPY main.py .
