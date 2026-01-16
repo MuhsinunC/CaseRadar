@@ -24,6 +24,8 @@ Every Ralph loop needs **two files**:
 | `--max-iterations` | YES | None | Must be set. If unsure, use `10` |
 | `--completion-promise` | YES | None | Exact string that signals completion |
 
+---
+
 ## Prompt File Structure
 
 The prompt file **must** start with `ultrathink:` as the very first characters:
@@ -40,25 +42,47 @@ Brief description of what needs to be accomplished.
 - Implementation plan: `.claude/my-task-plan.md`
 
 ## Instructions
-1. Read the implementation plan file FIRST
-2. Check progress and notes from previous iterations
+1. Read the relevant section of the implementation plan
+2. Check notes under that section for previous attempts
 3. Complete the next incomplete task
-4. Update progress and add notes to the plan file
+4. Add notes under that task about what you tried/learned
 5. Run tests and verify they pass
-6. Continue until all tasks done and tests passing
+6. Continue until all tasks done
+7. Commit and push all changes
 
-## Completion Promise
-Output `<promise>TASK_COMPLETE</promise>` when:
+## Completion Criteria
 - All tasks in the implementation plan are done
 - ALL tests have been run AND pass
-- Changes are committed and pushed
+- All changes are committed AND pushed to remote
+
+## Completion Promise
+Output `<promise>TASK_COMPLETE</promise>` only when ALL completion criteria are met.
 
 This promise MUST match the --completion-promise parameter exactly.
 ```
 
-## Implementation Plan File Structure (TDD Style)
+---
 
-The implementation plan **must** follow Test-Driven Development:
+## Implementation Plan File Structure
+
+The implementation plan follows **Test-Driven Development (TDD)** with **hierarchical notes under each task**.
+
+### Key Principles
+
+1. **Notes go under each task, not in a separate section**
+   - Each task can have sub-notes (1.a., 1.a.i., etc.)
+   - This keeps context close to the work
+   - You only need to read the relevant section, not the whole file
+
+2. **Tests must be FAILING before implementation**
+   - Write the test first
+   - Verify it fails (red phase)
+   - Only then implement to make it pass (green phase)
+
+3. **End with commit and push**
+   - Loop is NOT complete until changes are pushed
+
+### Template
 
 ```markdown
 # Task Implementation Plan
@@ -68,130 +92,198 @@ What we're building and why.
 
 ---
 
-## NOTES (Updated Each Iteration)
+## 1. Research Phase (COMPLETE BEFORE ANY IMPLEMENTATION)
 
-### What Has Been Tried
-- (Record everything attempted, even failures)
-
-### What Didn't Work & Why
-- (Critical: prevents repeating failed approaches)
-
-### Things To Research
-- [ ] (Topics needing investigation)
-
-### Research Completed
-- (Findings from research - APIs, libraries, etc.)
-
-### Current Blockers
-- (What's preventing progress)
-
-### Next Steps
-- (What to try next iteration)
-
----
-
-## Phase 0: Research (MUST COMPLETE BEFORE IMPLEMENTATION)
-
-### Codebase Understanding
+### 1.1. Codebase Understanding
 - [ ] Review existing code for similar/related functionality
-- [ ] Identify what already exists (avoid duplicate work!)
+  - Notes: (what you found, what already exists)
+- [ ] Identify what already exists to avoid duplicate work
+  - Notes: (existing implementations discovered)
 - [ ] Understand current patterns and conventions
+  - Notes: (patterns to follow)
 - [ ] Map integration points
+  - Notes: (where this connects to existing code)
 
-### External Research
+### 1.2. External Research
 - [ ] Research required APIs/SDKs
+  - Notes: (API docs reviewed, key findings)
+  - 1.2.a. What worked: (successful approaches)
+  - 1.2.b. What didn't work: (failed approaches and why)
 - [ ] Review library documentation
+  - Notes: (library versions, key methods)
 - [ ] Check for existing solutions/examples
+  - Notes: (examples found, repos referenced)
 
 ---
 
-## Phase 1: Write Tests First (TDD)
-- [ ] Write failing test for feature A
-- [ ] Write failing test for feature B
-- [ ] Verify all tests fail (red phase)
+## 2. Write Failing Tests First (TDD Red Phase)
 
-## Phase 2: Implementation
-- [ ] Implement feature A (make test pass)
-- [ ] Implement feature B (make test pass)
-- [ ] Refactor if needed (tests still pass)
+### 2.1. Feature A Tests
+- [ ] Write test for feature A
+  - Notes: (test file location, what it tests)
+- [ ] Verify test FAILS before implementation
+  - Notes: (failure message observed)
+  - 2.1.a. If test passes unexpectedly: investigate why (might already be implemented)
 
-## Phase 3: Integration & Browser Testing
-- [ ] Integration tests pass
-- [ ] Browser tests pass (use browser tool if needed)
-- [ ] All edge cases covered
+### 2.2. Feature B Tests
+- [ ] Write test for feature B
+  - Notes: (test file location, what it tests)
+- [ ] Verify test FAILS before implementation
+  - Notes: (failure message observed)
 
-## Phase 4: Documentation & Cleanup
-- [ ] Update documentation
-- [ ] Clean up temporary files
-- [ ] Commit and push
+---
+
+## 3. Implementation (TDD Green Phase)
+
+### 3.1. Implement Feature A
+- [ ] Write minimal code to make test pass
+  - Notes: (approach taken)
+  - 3.1.a. Attempts:
+    - 3.1.a.i. First attempt: (what you tried)
+    - 3.1.a.ii. Result: (passed/failed, why)
+  - 3.1.b. What didn't work: (failed approaches)
+  - 3.1.c. What worked: (successful approach)
+- [ ] Verify test passes
+  - Notes: (test output)
+
+### 3.2. Implement Feature B
+- [ ] Write minimal code to make test pass
+  - Notes: (approach taken)
+- [ ] Verify test passes
+  - Notes: (test output)
+
+### 3.3. Refactor (TDD Refactor Phase)
+- [ ] Clean up code while keeping tests green
+  - Notes: (refactoring done)
+- [ ] All tests still pass after refactor
+  - Notes: (test results)
+
+---
+
+## 4. Integration & Browser Testing
+
+### 4.1. Integration Tests
+- [ ] Run all integration tests
+  - Notes: (results, any failures)
+- [ ] All integration tests pass
+  - Notes: (final results)
+
+### 4.2. Browser Tests (if applicable)
+- [ ] Use browser tool to verify UI functionality
+  - Notes: (what was tested)
+- [ ] All browser tests pass
+  - Notes: (results)
+
+---
+
+## 5. Finalize
+
+### 5.1. Documentation
+- [ ] Update relevant documentation
+  - Notes: (docs updated)
+
+### 5.2. Commit and Push
+- [ ] Stage all changes
+  - Notes: (files staged)
+- [ ] Commit with descriptive message
+  - Notes: (commit hash)
+- [ ] Push to remote
+  - Notes: (push confirmed)
 
 ---
 
 ## Completion Criteria
 ALL of the following must be true:
 1. All checkboxes marked [x]
-2. ALL tests have been RUN
-3. ALL tests PASS (not just run - they must be green)
-4. Changes committed and pushed
+2. All tests have been RUN
+3. All tests PASS (green, not red)
+4. All changes COMMITTED
+5. All changes PUSHED to remote
 ```
+
+---
 
 ## Critical Rules
 
 ### 1. Research Before Implementation
 
-**ALWAYS complete Phase 0 before writing any code.**
+**ALWAYS complete Section 1 before writing any code.**
 
 Why this matters:
-- Avoids duplicate work (something might already exist)
+- Avoids duplicate work (something might already exist!)
 - Prevents bugs from conflicting implementations
 - Saves time by understanding the landscape first
 - Identifies the right approach before committing to it
 
 Research includes:
 - **Codebase**: What already exists? What patterns are used?
-- **External**: APIs, SDKs, libraries, documentation
+- **External**: APIs, SDKs, libraries, online documentation
 
-### 2. Test-Driven Development (TDD)
+### 2. Tests Must FAIL First (TDD)
 
-Follow the red-green-refactor cycle:
-1. **Red**: Write a failing test first
-2. **Green**: Write minimal code to make it pass
-3. **Refactor**: Clean up while keeping tests green
+This is non-negotiable:
 
-### 3. Notes in the Implementation Plan
+1. **Write the test** for the feature
+2. **Run the test** - it MUST fail
+3. **If test passes**: Stop! Investigate why. The feature might already exist.
+4. **Only after confirming failure**: Implement the feature
+5. **Run test again** - it should now pass
 
-**This is critical for long-running loops.**
+The "red" phase (failing test) proves your test actually tests something.
 
-Ralph loops can run for many iterations, exceeding your context window. The implementation plan file is read every iteration, so it's your persistent memory.
+### 3. Hierarchical Notes Under Each Task
 
-**Always record in the NOTES section:**
-- Things you've already tried
-- Things that didn't work and WHY
-- Things you want to try next
-- Research findings
-- Current blockers
-- Hypotheses and observations
+**Why this structure?**
+
+Ralph loops can run for many iterations, exceeding your context window. The implementation plan is your persistent memory, but it might get large.
+
+By putting notes **under each task**:
+- You only read the section you're working on
+- Notes stay close to the relevant context
+- You don't need to load the entire file to understand one task
+
+**Note format:**
+```markdown
+- [ ] Task description
+  - Notes: (general notes about this task)
+  - 1.a. Sub-note: (more detail)
+    - 1.a.i. Even more detail
+  - 1.b. What didn't work: (failed approach and why)
+  - 1.c. What worked: (successful approach)
+```
 
 This prevents:
 - Trying the same failed approach repeatedly
 - Forgetting what you learned
 - Losing context between iterations
 
-### 4. Tests Must Pass (Not Just Run)
+### 4. Tests Must PASS (Not Just Run)
 
 The loop is **NOT complete** until:
 - All tests have been executed
 - All tests are GREEN (passing)
 - No skipped or ignored tests
+- No failing tests
 
 Running tests that fail does not count as completion.
 
-### 5. Browser Testing
+### 5. Must Commit AND Push
 
-For UI or web-related tasks, remember:
+The loop is **NOT complete** until:
+- All changes are staged
+- All changes are committed
+- All changes are pushed to remote
+
+This is often forgotten! Add it to your completion criteria.
+
+### 6. Browser Testing Available
+
+For UI or web-related tasks:
 - The **browser tool** is available for actual browser tests
-- Use it to verify UI functionality
-- Include browser tests in Phase 3
+- Use it to verify UI functionality works in a real browser
+- Include browser tests in Section 4
+
+---
 
 ## Complete Example
 
@@ -207,53 +299,102 @@ Add user authentication with JWT tokens.
 
 ---
 
-## NOTES (Updated Each Iteration)
+## 1. Research Phase
 
-### What Has Been Tried
-- (nothing yet)
+### 1.1. Codebase Understanding
+- [ ] Check if auth already exists
+  - Notes:
+- [ ] Review existing user model
+  - Notes:
+- [ ] Check API patterns used
+  - Notes:
 
-### What Didn't Work & Why
-- (nothing yet)
-
-### Research Completed
-- (nothing yet)
-
-### Next Steps
-- Start with Phase 0 research
+### 1.2. External Research
+- [ ] Research JWT library options
+  - Notes:
+  - 1.2.a. Libraries considered:
+  - 1.2.b. Library chosen and why:
 
 ---
 
-## Phase 0: Research
-- [ ] Check if auth already exists in codebase
-- [ ] Review existing user model
-- [ ] Research JWT library options
-- [ ] Check API patterns used in project
+## 2. Write Failing Tests (TDD Red)
 
-## Phase 1: Write Tests (TDD)
+### 2.1. Registration Test
 - [ ] Write test: user can register
+  - Notes:
+- [ ] Verify test fails
+  - Notes:
+
+### 2.2. Login Test
 - [ ] Write test: user can login
+  - Notes:
+- [ ] Verify test fails
+  - Notes:
+
+### 2.3. Validation Test
 - [ ] Write test: invalid credentials rejected
-- [ ] Verify all tests fail
+  - Notes:
+- [ ] Verify test fails
+  - Notes:
 
-## Phase 2: Implementation
-- [ ] Implement registration (test passes)
-- [ ] Implement login (test passes)
-- [ ] Implement validation (test passes)
+---
 
-## Phase 3: Integration Testing
-- [ ] All unit tests pass
-- [ ] Integration tests pass
-- [ ] Browser login flow works (use browser tool)
+## 3. Implementation (TDD Green)
 
-## Phase 4: Finalize
-- [ ] Documentation updated
-- [ ] Commit and push
+### 3.1. Implement Registration
+- [ ] Make registration test pass
+  - Notes:
+  - 3.1.a. Approach:
+  - 3.1.b. Issues encountered:
+- [ ] Test passes
+  - Notes:
+
+### 3.2. Implement Login
+- [ ] Make login test pass
+  - Notes:
+- [ ] Test passes
+  - Notes:
+
+### 3.3. Implement Validation
+- [ ] Make validation test pass
+  - Notes:
+- [ ] Test passes
+  - Notes:
+
+---
+
+## 4. Integration Testing
+
+### 4.1. All Tests
+- [ ] Run full test suite
+  - Notes:
+- [ ] All tests pass
+  - Notes:
+
+### 4.2. Browser Testing
+- [ ] Test login flow in browser
+  - Notes:
+
+---
+
+## 5. Finalize
+
+### 5.1. Documentation
+- [ ] Update API docs
+  - Notes:
+
+### 5.2. Commit and Push
+- [ ] Commit all changes
+  - Notes:
+- [ ] Push to remote
+  - Notes:
+
+---
 
 ## Completion Criteria
-1. All phases complete
+1. All tasks [x]
 2. All tests passing
-3. Browser tests passing
-4. PR ready
+3. Committed and pushed
 ```
 
 ### Step 2: Create the prompt file
@@ -272,26 +413,29 @@ Implement user authentication following TDD methodology.
 - Plan: `.claude/feature-x-plan.md`
 
 ## Instructions
-1. Read `.claude/feature-x-plan.md` completely
-2. Check the NOTES section for previous attempts
+1. Read the current section of `.claude/feature-x-plan.md`
+2. Check notes under that section for previous attempts
 3. Find the first incomplete task (marked with `- [ ]`)
 4. Complete that task
 5. Mark it done with `- [x]`
-6. Update the NOTES section with what you tried/learned
-7. Run tests after implementation changes
-8. Continue to next task
+6. Add notes under that task about what you tried/learned
+7. If writing tests: verify they FAIL before implementing
+8. Run tests after implementation changes
+9. Continue to next task
+10. When all tasks done: commit and push
 
 ## Important Rules
-- Complete Phase 0 (Research) before any implementation
-- Write tests BEFORE implementation (TDD)
-- Update NOTES every iteration to track progress
-- Do NOT mark complete until ALL tests PASS
+- Complete Section 1 (Research) before any implementation
+- Tests must FAIL before you implement (TDD red phase)
+- Add notes under each task, not in a separate section
+- Do NOT mark complete until all tests PASS
+- Do NOT mark complete until changes are PUSHED
 
 ## Completion Promise
 Output `<promise>FEATURE_X_DONE</promise>` when:
 - All tasks complete
-- All tests run AND pass
-- Changes committed and pushed
+- All tests pass (green)
+- All changes committed and pushed
 ```
 
 ### Step 3: Run the Ralph loop
@@ -299,6 +443,8 @@ Output `<promise>FEATURE_X_DONE</promise>` when:
 ```bash
 /ralph-loop:ralph-loop "$(cat .claude/feature-x-loop.md)" --max-iterations 15 --completion-promise "FEATURE_X_DONE"
 ```
+
+---
 
 ## Common Mistakes
 
@@ -310,33 +456,43 @@ Output `<promise>FEATURE_X_DONE</promise>` when:
 | Missing `ultrathink:` | Suboptimal reasoning | Start prompt with `ultrathink:` |
 | Promise mismatch | Loop never detects completion | Ensure prompt defines exact same promise |
 | No plan file | Unstructured work | Always create implementation plan |
-| Skipping research | Duplicate work, bugs | Complete Phase 0 first |
-| Implementation before tests | Not TDD | Write failing tests first |
-| Not updating notes | Repeating failed attempts | Update NOTES every iteration |
+| Skipping research | Duplicate work, bugs | Complete Section 1 first |
+| Implementation before failing tests | Not TDD | Write test, verify it FAILS, then implement |
+| Notes in separate section | Hard to find context | Put notes under each task |
 | Tests run but fail | Premature completion | Tests must PASS, not just run |
+| Changes not pushed | Incomplete work | Must commit AND push |
 | Forgetting browser tests | UI bugs missed | Use browser tool for UI tasks |
+
+---
 
 ## Pre-Flight Checklist
 
 Before starting a Ralph loop, verify:
 
-- [ ] Created implementation plan with TDD phases
-- [ ] Plan has NOTES section for tracking attempts
-- [ ] Plan has Phase 0 for research (codebase + external)
+- [ ] Created implementation plan with TDD structure
+- [ ] Plan has Section 1 for research (codebase + external)
+- [ ] Plan has Section 2 for writing FAILING tests first
+- [ ] Plan has Section 5 for commit AND push
+- [ ] Notes go under each task (hierarchical: 1.a., 1.a.i., etc.)
 - [ ] Created prompt file starting with `ultrathink:`
-- [ ] Prompt instructs to read plan file first
-- [ ] Prompt instructs to update NOTES each iteration
+- [ ] Prompt instructs to read plan file section by section
+- [ ] Prompt instructs to verify tests FAIL before implementing
+- [ ] Prompt instructs to add notes under each task
 - [ ] Prompt specifies tests must PASS (not just run)
-- [ ] Prompt defines completion promise with `<promise>` tags
+- [ ] Prompt specifies must commit AND push
 - [ ] `--max-iterations` is set (minimum 10)
 - [ ] `--completion-promise` matches what's in the prompt file
 - [ ] Using `cat` to read prompt file, not inline quotes
+
+---
 
 ## Cancelling a Loop
 
 ```bash
 /cancel-ralph
 ```
+
+---
 
 ## Related
 
