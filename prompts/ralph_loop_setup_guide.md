@@ -562,8 +562,10 @@ Only use browser tool if:
 
 ## Validation Commands
 
+Customize these for your project's test/build setup:
+
 ```bash
-# Run these to verify completion
+# Example commands - replace with your project's actual commands
 npm test              # or: pytest, go test, etc.
 npm run test:e2e      # Playwright tests
 npm run lint          # Linting
