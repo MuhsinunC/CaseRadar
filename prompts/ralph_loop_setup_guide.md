@@ -1,6 +1,6 @@
-# Ralph Loop Setup Guidelines
+# Ralph Loop Setup Guide
 
-Quick reference for setting up Ralph loops correctly.
+Quick reference for setting up Ralph loops correctly. Copy this file to any project.
 
 ## Required Components
 
@@ -39,7 +39,6 @@ Brief description of what needs to be accomplished.
 ## Files
 - Implementation plan: `.claude/my-task-plan.md`
 - Progress tracking: `.claude/my-task-progress.md`
-- Other relevant files...
 
 ## Instructions
 1. Read the implementation plan
@@ -88,13 +87,11 @@ All of the following must be true:
 3. Changes committed and pushed
 ```
 
-## Example: Complete Setup
+## Complete Example
 
 ### Step 1: Create the implementation plan
 
-```bash
-# .claude/feature-x-plan.md
-```
+File: `.claude/feature-x-plan.md`
 
 ```markdown
 # Feature X Implementation Plan
@@ -119,9 +116,7 @@ All of the following must be true:
 
 ### Step 2: Create the prompt file
 
-```bash
-# .claude/feature-x-loop.md
-```
+File: `.claude/feature-x-loop.md`
 
 ```markdown
 ultrathink:
@@ -162,7 +157,9 @@ Output `<promise>FEATURE_X_DONE</promise>` when all tasks in the plan are comple
 | Promise mismatch | Loop never detects completion | Ensure prompt defines exact same promise |
 | No plan file | Unstructured work | Always create implementation plan |
 
-## Checklist Before Starting
+## Pre-Flight Checklist
+
+Before starting a Ralph loop, verify:
 
 - [ ] Created implementation plan file with phases and checkboxes
 - [ ] Created prompt file starting with `ultrathink:`
@@ -171,3 +168,13 @@ Output `<promise>FEATURE_X_DONE</promise>` when all tasks in the plan are comple
 - [ ] `--max-iterations` is set (minimum 10)
 - [ ] `--completion-promise` matches what's in the prompt file
 - [ ] Using `cat` to read prompt file, not inline quotes
+
+## Cancelling a Loop
+
+```bash
+/cancel-ralph
+```
+
+## Related
+
+See `ralph_loop_best_practices.md` for philosophy and advanced usage.
