@@ -11,33 +11,36 @@ import { TransformedComplaint } from './types';
 /**
  * Column indices for the NHTSA flat file format
  * These match the order of fields in FLAT_CMPL.txt
- * Note: The flat file has no ODINO column - we use CMPLID as odiNumber
+ * Based on official NHTSA data dictionary: https://static.nhtsa.gov/odi/ffdd/cmpl/CMPL.txt
  */
 export const FLAT_FILE_COLUMNS = {
-  CMPLID: 0,      // Unique complaint ID (also used as odiNumber)
-  ODINO: 1,       // Index 1 is actually MFR_NAME in the file, but kept for API compatibility
-  MFR_NAME: 1,    // Manufacturer name
-  MAKETXT: 2,     // Vehicle make
-  MODELTXT: 3,    // Vehicle model
-  YEARTXT: 4,     // Model year
-  CRASH: 5,       // Crash indicator (Y/N)
-  FAILDATE: 6,    // Date of failure (YYYYMMDD)
-  FIRE: 7,        // Fire indicator (Y/N)
-  INJURED: 8,     // Number injured
-  DEATHS: 9,      // Number of deaths
-  COMPDESC: 10,   // Component description
-  CITY: 11,       // City
-  STATE: 12,      // State
-  VIN: 13,        // Partial VIN
-  DATEA: 14,      // Date added (YYYYMMDD)
-  LDATE: 15,      // Last update date (YYYYMMDD)
-  CDESCR: 17,     // Complaint description (index 16 is empty)
+  CMPLID: 0,      // Unique complaint ID (CHAR 9)
+  ODINO: 1,       // Internal reference number (CHAR 9)
+  MFR_NAME: 2,    // Manufacturer name (CHAR 40)
+  MAKETXT: 3,     // Vehicle make (CHAR 25)
+  MODELTXT: 4,    // Vehicle model (CHAR 256)
+  YEARTXT: 5,     // Model year (CHAR 4)
+  CRASH: 6,       // Crash indicator (Y/N)
+  FAILDATE: 7,    // Date of failure (YYYYMMDD)
+  FIRE: 8,        // Fire indicator (Y/N)
+  INJURED: 9,     // Number injured
+  DEATHS: 10,     // Number of deaths
+  COMPDESC: 11,   // Component description (CHAR 128)
+  CITY: 12,       // City (CHAR 30)
+  STATE: 13,      // State code (CHAR 2)
+  VIN: 14,        // Partial VIN (CHAR 11)
+  DATEA: 15,      // Date added (YYYYMMDD)
+  LDATE: 16,      // Last update date (YYYYMMDD)
+  MILES: 17,      // Vehicle mileage (NUMBER 7)
+  OCCURENCES: 18, // Occurrence count (NUMBER 4)
+  CDESCR: 19,     // Complaint description (CHAR 2048)
 } as const;
 
 /**
  * Minimum number of fields required for a valid record
+ * Must have at least 20 fields to include CDESCR at index 19
  */
-const MIN_FIELDS = 18;
+const MIN_FIELDS = 20;
 
 /**
  * Flat file record type (raw parsed data)
@@ -60,6 +63,8 @@ export interface FlatFileRecord {
   vin: string;
   datea: string;
   ldate: string;
+  miles: string;
+  occurences: string;
   cdescr: string;
 }
 
@@ -88,11 +93,12 @@ export function parseFlatFileLine(line: string): FlatFileRecord | null {
     return null;
   }
 
-  // Extract and trim all fields
+  // Extract and trim all fields using correct column indices
   const cmplid = fields[FLAT_FILE_COLUMNS.CMPLID]?.trim() || '';
+  const odino = fields[FLAT_FILE_COLUMNS.ODINO]?.trim() || '';
   return {
     cmplid,
-    odino: cmplid, // NHTSA flat file doesn't have separate ODINO, use CMPLID
+    odino: odino || cmplid, // Use ODINO field, fallback to CMPLID if empty
     mfr_name: fields[FLAT_FILE_COLUMNS.MFR_NAME]?.trim() || '',
     maketxt: fields[FLAT_FILE_COLUMNS.MAKETXT]?.trim() || '',
     modeltxt: fields[FLAT_FILE_COLUMNS.MODELTXT]?.trim() || '',
@@ -108,6 +114,8 @@ export function parseFlatFileLine(line: string): FlatFileRecord | null {
     vin: fields[FLAT_FILE_COLUMNS.VIN]?.trim() || '',
     datea: fields[FLAT_FILE_COLUMNS.DATEA]?.trim() || '',
     ldate: fields[FLAT_FILE_COLUMNS.LDATE]?.trim() || '',
+    miles: fields[FLAT_FILE_COLUMNS.MILES]?.trim() || '',
+    occurences: fields[FLAT_FILE_COLUMNS.OCCURENCES]?.trim() || '',
     cdescr: fields[FLAT_FILE_COLUMNS.CDESCR]?.trim() || '',
   };
 }
