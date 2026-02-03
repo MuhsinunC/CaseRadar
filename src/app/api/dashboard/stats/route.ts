@@ -4,8 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, getApproximateCount } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { cacheAside, getCacheStats, getCachedValue } from '@/lib/cache/cache-aside';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,124 +18,134 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const period = searchParams.get('period') || '30d';
 
-    // Calculate date range
-    const now = new Date();
-    let startDate: Date;
-    switch (period) {
-      case '7d':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '30d':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case '90d':
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      default:
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
+    // Cache the entire stats response per organization (5 minutes)
+    // This dramatically improves dashboard load times after first visit
+    // Stats don't need to be real-time - 5 min cache is acceptable
+    const STATS_CACHE_TTL = 300; // 5 minutes - better cache hit rate
+    const cacheKey = `dashboard:stats:${user.organizationId}:${period}`;
 
-    // Fetch stats in parallel
-    const [
-      totalPatterns,
-      highSeverityPatterns,
-      upwardTrendPatterns,
-      recentPatterns,
-      totalComplaints,
-      complaintsInPeriod,
-      generatedComplaints,
-      complaintsByMake,
-    ] = await Promise.all([
-      // Total patterns (global or org-specific)
-      prisma.pattern.count({
-        where: {
-          OR: [
-            { organizationId: user.organizationId },
-            { organizationId: null },
-          ],
-        },
-      }),
-      // High severity patterns (>= 7)
-      prisma.pattern.count({
-        where: {
-          OR: [
-            { organizationId: user.organizationId },
-            { organizationId: null },
-          ],
-          severityScore: { gte: 7 },
-        },
-      }),
-      // Upward trending patterns
-      prisma.pattern.count({
-        where: {
-          OR: [
-            { organizationId: user.organizationId },
-            { organizationId: null },
-          ],
-          trendDirection: 'INCREASING',
-        },
-      }),
-      // Patterns created in period
-      prisma.pattern.count({
-        where: {
-          OR: [
-            { organizationId: user.organizationId },
-            { organizationId: null },
-          ],
-          createdAt: { gte: startDate },
-        },
-      }),
-      // Total complaints tracked
-      prisma.complaint.count(),
-      // Complaints received in period
-      prisma.complaint.count({
-        where: {
-          dateAdded: { gte: startDate },
-        },
-      }),
-      // Generated complaints for org
-      prisma.generatedComplaint.count({
-        where: { organizationId: user.organizationId },
-      }),
-      // Top manufacturers
-      prisma.complaint.groupBy({
-        by: ['make'],
-        _count: { make: true },
-        orderBy: { _count: { make: 'desc' } },
-        take: 10,
-      }),
-    ]);
+    // Debug: Check if value is already cached
+    const cachedValue = getCachedValue(cacheKey);
+    const cacheStats = await getCacheStats();
+    console.log(`[CACHE DEBUG] Key: ${cacheKey}, Cached: ${!!cachedValue}, Stats: hits=${cacheStats.hits}, misses=${cacheStats.misses}, size=${cacheStats.size}`);
 
-    // Return in flat format expected by dashboard component
-    return NextResponse.json({
-      totalComplaints: totalComplaints,
-      complaintsChange: 0, // TODO: Calculate actual change
-      activePatterns: totalPatterns,
-      patternsChange: 0, // TODO: Calculate actual change
-      generatedComplaints: generatedComplaints,
-      generatedChange: 0,
-      highSeverityPatterns: highSeverityPatterns,
-      severityChange: 0,
-      // Also include detailed stats for future use
-      stats: {
-        patterns: {
-          total: totalPatterns,
-          highSeverity: highSeverityPatterns,
-          upwardTrend: upwardTrendPatterns,
-          recentlyCreated: recentPatterns,
-        },
-        complaints: {
-          total: totalComplaints,
-          inPeriod: complaintsInPeriod,
-          generated: generatedComplaints,
-        },
-        topManufacturers: complaintsByMake.map((item) => ({
-          make: item.make,
-          count: item._count.make,
-        })),
+    const stats = await cacheAside(
+      cacheKey,
+      async () => {
+        // Calculate date range
+        const now = new Date();
+        let startDate: Date;
+        switch (period) {
+          case '7d':
+            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case '30d':
+            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            break;
+          case '90d':
+            startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+            break;
+          default:
+            startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        }
+
+        // Fetch all stats in parallel
+        const [
+          totalPatterns,
+          highSeverityPatterns,
+          upwardTrendPatterns,
+          recentPatterns,
+          totalComplaints,
+          complaintsInPeriod,
+          generatedComplaints,
+          complaintsByMake,
+        ] = await Promise.all([
+          prisma.pattern.count({
+            where: {
+              OR: [
+                { organizationId: user.organizationId },
+                { organizationId: null },
+              ],
+            },
+          }),
+          prisma.pattern.count({
+            where: {
+              OR: [
+                { organizationId: user.organizationId },
+                { organizationId: null },
+              ],
+              severityScore: { gte: 7 },
+            },
+          }),
+          prisma.pattern.count({
+            where: {
+              OR: [
+                { organizationId: user.organizationId },
+                { organizationId: null },
+              ],
+              trendDirection: 'INCREASING',
+            },
+          }),
+          prisma.pattern.count({
+            where: {
+              OR: [
+                { organizationId: user.organizationId },
+                { organizationId: null },
+              ],
+              createdAt: { gte: startDate },
+            },
+          }),
+          // Use approximate count for 2M+ row table - instant vs 1.5s
+          getApproximateCount('Complaint'),
+          prisma.complaint.count({
+            where: {
+              dateAdded: { gte: startDate },
+            },
+          }),
+          prisma.generatedComplaint.count({
+            where: { organizationId: user.organizationId },
+          }),
+          prisma.complaint.groupBy({
+            by: ['make'],
+            _count: { make: true },
+            orderBy: { _count: { make: 'desc' } },
+            take: 10,
+          }),
+        ]);
+
+        return {
+          totalComplaints,
+          complaintsChange: 0,
+          activePatterns: totalPatterns,
+          patternsChange: 0,
+          generatedComplaints,
+          generatedChange: 0,
+          highSeverityPatterns,
+          severityChange: 0,
+          stats: {
+            patterns: {
+              total: totalPatterns,
+              highSeverity: highSeverityPatterns,
+              upwardTrend: upwardTrendPatterns,
+              recentlyCreated: recentPatterns,
+            },
+            complaints: {
+              total: totalComplaints,
+              inPeriod: complaintsInPeriod,
+              generated: generatedComplaints,
+            },
+            topManufacturers: complaintsByMake.map((item) => ({
+              make: item.make,
+              count: item._count.make,
+            })),
+          },
+          period,
+        };
       },
-      period,
-    });
+      { ttl: STATS_CACHE_TTL }
+    );
+
+    return NextResponse.json(stats);
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     return NextResponse.json(

@@ -64,40 +64,17 @@ export async function syncUser(input: SyncUserInput) {
     throw new Error(`Organization not found: ${clerkOrgId}`);
   }
 
-  if (useUpsert) {
-    return prisma.user.upsert({
-      where: { clerkUserId },
-      create: {
-        clerkUserId,
-        email,
-        role,
-        organizationId: organization.id,
-      },
-      update: {
-        email,
-      },
-    });
-  }
-
-  // Check if user exists
-  const existingUser = await prisma.user.findUnique({
+  // Always use upsert to handle race conditions where multiple requests
+  // might try to create the same user simultaneously
+  return prisma.user.upsert({
     where: { clerkUserId },
-  });
-
-  if (existingUser) {
-    return prisma.user.update({
-      where: { clerkUserId },
-      data: { email },
-    });
-  }
-
-  return prisma.user.create({
-    data: {
+    create: {
       clerkUserId,
       email,
       role,
       organizationId: organization.id,
     },
+    update: useUpsert ? { email } : {},
   });
 }
 

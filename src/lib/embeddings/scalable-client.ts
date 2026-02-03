@@ -154,14 +154,14 @@ export class ScalableEmbeddingClient {
     // Process batches in parallel for better throughput
     // Limit concurrency to avoid overwhelming the service
     const maxConcurrent = 4;
-    const results: number[][][] = new Array(batches.length);
+    const results: (number[][] | undefined)[] = new Array(batches.length);
     let completed = 0;
 
     for (let i = 0; i < batches.length; i += maxConcurrent) {
       const batchGroup = batches.slice(i, i + maxConcurrent);
       const promises = batchGroup.map(async (batch, idx) => {
         const embeddings = await this.embedBatch(batch);
-        results[i + idx] = [embeddings];
+        results[i + idx] = embeddings;
         completed += batch.length;
         if (onProgress) {
           onProgress(Math.min(completed, texts.length), texts.length);
@@ -173,7 +173,7 @@ export class ScalableEmbeddingClient {
     }
 
     // Flatten results in correct order
-    return results.flat(2);
+    return (results.filter(Boolean) as number[][][]).flat();
   }
 
   /**

@@ -4,11 +4,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, getApproximateCount } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/api/rate-limit';
 import { Problems } from '@/lib/api/rfc7807-errors';
 import { buildHybridPaginationResponse } from '@/lib/api/cursor-pagination';
+import { cacheAside } from '@/lib/cache/cache-aside';
 
 /**
  * Add rate limit headers to a NextResponse
@@ -150,7 +151,9 @@ export async function GET(request: NextRequest) {
     const semanticSearch = searchParams.get('semanticSearch');
     const searchType = semanticSearch ? 'semantic' : search ? 'keyword' : 'none';
 
-    // Execute queries
+    // Execute queries - use approximate count for unfiltered queries (instant vs 1.4s)
+    const hasFilters = Object.keys(where).length > 0;
+
     const [complaints, total] = await Promise.all([
       prisma.complaint.findMany({
         where,
@@ -163,36 +166,52 @@ export async function GET(request: NextRequest) {
           make: true,
           model: true,
           year: true,
-                    component: true,
+          component: true,
+          description: true,
           crash: true,
           fire: true,
           injuries: true,
           deaths: true,
+          dateAdded: true,
           createdAt: true,
         },
       }),
-      prisma.complaint.count({ where }),
+      // Use approximate count for unfiltered queries (instant from pg_class)
+      // Use exact count for filtered queries (indexes help)
+      hasFilters
+        ? prisma.complaint.count({ where })
+        : getApproximateCount('Complaint'),
     ]);
 
     // Include stats if requested
     const includeStats = searchParams.get('includeStats') === 'true';
     let stats = undefined;
+    const STATS_CACHE_TTL = 300; // 5 minutes
 
     if (includeStats) {
+      // Cache all expensive stats queries, use approximate count for total
       const [totalComplaints, topMakes, severityStats] = await Promise.all([
-        prisma.complaint.count(),
-        prisma.complaint.groupBy({
-          by: ['make'],
-          _count: true,
-          orderBy: { _count: { make: 'desc' } },
-          take: 10,
-        }),
-        Promise.all([
-          prisma.complaint.count({ where: { deaths: { gt: 0 } } }),
-          prisma.complaint.count({ where: { injuries: { gt: 0 } } }),
-          prisma.complaint.count({ where: { crash: true } }),
-          prisma.complaint.count({ where: { fire: true } }),
-        ]),
+        getApproximateCount('Complaint'), // Instant approximate count
+        cacheAside(
+          'complaints:topMakes',
+          () => prisma.complaint.groupBy({
+            by: ['make'],
+            _count: true,
+            orderBy: { _count: { make: 'desc' } },
+            take: 10,
+          }),
+          { ttl: STATS_CACHE_TTL }
+        ),
+        cacheAside(
+          'complaints:severityStats',
+          () => Promise.all([
+            prisma.complaint.count({ where: { deaths: { gt: 0 } } }),
+            prisma.complaint.count({ where: { injuries: { gt: 0 } } }),
+            prisma.complaint.count({ where: { crash: true } }),
+            prisma.complaint.count({ where: { fire: true } }),
+          ]),
+          { ttl: STATS_CACHE_TTL }
+        ),
       ]);
 
       stats = {

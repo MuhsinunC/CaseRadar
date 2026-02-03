@@ -37,22 +37,50 @@ export interface CacheStats {
 const DEFAULT_TTL = 300; // 5 minutes
 
 /**
- * In-memory cache storage
+ * Global cache type for persistence across Hot Reloads
+ * In Next.js dev mode, modules are frequently reloaded, which would
+ * clear a regular Map. Using globalThis persists the cache.
  */
-const cache = new Map<string, CacheEntry<unknown>>();
+interface GlobalCache {
+  cache: Map<string, CacheEntry<unknown>>;
+  pending: Map<string, Promise<unknown>>;
+  stats: { hits: number; misses: number };
+}
+
+// Extend globalThis type
+declare global {
+  // eslint-disable-next-line no-var
+  var __caseradar_cache: GlobalCache | undefined;
+}
+
+/**
+ * Get or create the global cache (persists across Hot Reloads in dev)
+ */
+function getGlobalCache(): GlobalCache {
+  if (!globalThis.__caseradar_cache) {
+    globalThis.__caseradar_cache = {
+      cache: new Map<string, CacheEntry<unknown>>(),
+      pending: new Map<string, Promise<unknown>>(),
+      stats: { hits: 0, misses: 0 },
+    };
+  }
+  return globalThis.__caseradar_cache;
+}
+
+/**
+ * In-memory cache storage (persisted via globalThis)
+ */
+const cache = getGlobalCache().cache;
 
 /**
  * Pending promises for deduplication
  */
-const pending = new Map<string, Promise<unknown>>();
+const pending = getGlobalCache().pending;
 
 /**
  * Statistics tracking
  */
-let stats = {
-  hits: 0,
-  misses: 0,
-};
+const stats = getGlobalCache().stats;
 
 /**
  * Clear the entire cache
@@ -60,7 +88,9 @@ let stats = {
 export function clearCache(): void {
   cache.clear();
   pending.clear();
-  stats = { hits: 0, misses: 0 };
+  const globalCache = getGlobalCache();
+  globalCache.stats.hits = 0;
+  globalCache.stats.misses = 0;
 }
 
 /**

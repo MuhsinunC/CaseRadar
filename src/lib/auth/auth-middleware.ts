@@ -9,6 +9,16 @@ import type { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { Role, Plan } from '@prisma/client';
 
+// Check if Clerk is properly configured (not placeholder values)
+const CLERK_SECRET = process.env.CLERK_SECRET_KEY || '';
+const IS_CLERK_CONFIGURED = CLERK_SECRET && !CLERK_SECRET.includes('REPLACE_ME');
+
+// E2E Testing mode - bypass Clerk and use dev user
+const IS_E2E_TESTING = process.env.NEXT_PUBLIC_E2E_TESTING === 'true';
+
+// Development user for when Clerk isn't configured
+const DEV_USER_ID = 'dev_user_001';
+
 /**
  * Authenticated user with database info
  */
@@ -49,14 +59,26 @@ export type AuthenticatedHandler = (
  * Auto-provisions users in development if they don't exist
  */
 export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
-  const authResult = await auth();
+  let clerkUserId: string;
 
-  if (!authResult.userId) {
-    return null;
+  // If Clerk isn't configured or in E2E testing mode, use development user
+  if (!IS_CLERK_CONFIGURED || IS_E2E_TESTING) {
+    if (IS_E2E_TESTING) {
+      console.log('[AUTH] E2E Testing mode - using development user');
+    } else {
+      console.warn('[AUTH] Clerk not configured - using development user');
+    }
+    clerkUserId = DEV_USER_ID;
+  } else {
+    const authResult = await auth();
+    if (!authResult.userId) {
+      return null;
+    }
+    clerkUserId = authResult.userId;
   }
 
   let user = await prisma.user.findUnique({
-    where: { clerkUserId: authResult.userId },
+    where: { clerkUserId },
     include: {
       organization: true,
     },
@@ -64,13 +86,19 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
 
   // Auto-provision user if they don't exist (dev mode)
   if (!user) {
-    // Get user info from Clerk
-    const clerkUser = await currentUser();
-    if (!clerkUser) {
-      return null;
-    }
+    let email: string;
 
-    const email = clerkUser.emailAddresses?.[0]?.emailAddress || `user-${authResult.userId}@caseradar.local`;
+    if (!IS_CLERK_CONFIGURED || IS_E2E_TESTING) {
+      // Development/E2E mode - use dev email
+      email = 'dev@caseradar.local';
+    } else {
+      // Get user info from Clerk
+      const clerkUser = await currentUser();
+      if (!clerkUser) {
+        return null;
+      }
+      email = clerkUser.emailAddresses?.[0]?.emailAddress || `user-${clerkUserId}@caseradar.local`;
+    }
 
     // Find or create default organization
     let defaultOrg = await prisma.organization.findFirst({
@@ -87,10 +115,16 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
       });
     }
 
-    // Create the user
-    user = await prisma.user.create({
-      data: {
-        clerkUserId: authResult.userId,
+    // Use upsert to handle race conditions where multiple requests
+    // might try to create the same user simultaneously
+    user = await prisma.user.upsert({
+      where: { clerkUserId: clerkUserId },
+      update: {
+        // Update email in case it changed
+        email,
+      },
+      create: {
+        clerkUserId: clerkUserId,
         email,
         role: 'ADMIN', // First user gets admin
         organizationId: defaultOrg.id,
